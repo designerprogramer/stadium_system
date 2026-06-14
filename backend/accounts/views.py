@@ -1,4 +1,5 @@
 from datetime import timedelta
+import logging
 
 from django.conf import settings
 from django.contrib.auth.hashers import make_password
@@ -30,6 +31,8 @@ from .serializers import (
     UserDirectorySerializer,
     UserProfileSerializer,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class EmailDeliveryUnavailable(APIException):
@@ -102,6 +105,7 @@ class RegisterView(generics.CreateAPIView):
         try:
             send_otp_email(data['email'], otp, 'Stadium System Registration OTP')
         except Exception as exc:
+            logger.exception('Registration OTP email delivery failed')
             raise EmailDeliveryUnavailable() from exc
 
         return Response(
