@@ -1,0 +1,11 @@
+# Local environment files
+backend/.env
+backend/staticfiles/
+.env
+
+# Local Python/runtime files
+.venv/
+**/__pycache__/
+*.py[cod]
+backend/db.sqlite3
+backend/media/
