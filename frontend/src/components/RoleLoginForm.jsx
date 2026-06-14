@@ -63,7 +63,10 @@ export default function RoleLoginForm({ roleName, loginEndpoint, accentClass }) 
       });
       navigate(getDashboardPathForRole(data.user?.role), { replace: true });
     } catch (apiError) {
-      const message = apiError?.response?.data?.detail || "Login failed. Check your details.";
+      const message = apiError?.response?.data?.detail
+        || (apiError?.request
+          ? "Cannot reach the backend. Check the Netlify API URL and Render CORS settings."
+          : "Login failed. Check your details.");
       setError(message);
     } finally {
       setLoading(false);
