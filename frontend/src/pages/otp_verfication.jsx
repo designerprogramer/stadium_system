@@ -1,6 +1,7 @@
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useState, useRef, useEffect } from "react";
 import API from "../lib/api";
+import { getApiErrorMessage } from "../lib/apiError";
 
 export default function VerifyOTP() {
   const navigate = useNavigate();
@@ -100,11 +101,7 @@ export default function VerifyOTP() {
         setError("Invalid OTP purpose.");
       }
     } catch (apiError) {
-      const apiData = apiError?.response?.data;
-      const firstError = apiData
-        ? Object.values(apiData).flat()[0]
-        : "OTP verification failed. Please try again.";
-      setError(firstError);
+      setError(getApiErrorMessage(apiError, "OTP verification failed. Please try again."));
     } finally {
       setLoading(false);
     }

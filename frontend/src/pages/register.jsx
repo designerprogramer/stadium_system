@@ -2,6 +2,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { useState } from "react";
 import { ArrowLeft, Mail, Phone, UserRound, LockKeyhole } from "lucide-react";
 import API from "../lib/api";
+import { getApiErrorMessage } from "../lib/apiError";
 
 export default function Register() {
   const navigate = useNavigate();
@@ -41,11 +42,7 @@ export default function Register() {
         { replace: true }
       );
     } catch (apiError) {
-      const apiData = apiError?.response?.data;
-      const firstError = apiData
-        ? Object.values(apiData).flat()[0]
-        : "Unable to reach the registration service. Please try again.";
-      setError(firstError);
+      setError(getApiErrorMessage(apiError, "Unable to create account. Please try again."));
     } finally {
       setLoading(false);
     }
