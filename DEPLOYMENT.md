@@ -18,7 +18,7 @@ Set these secret/environment values in the Render service:
 
 Render supplies `DATABASE_URL`, and the blueprint generates
 `DJANGO_SECRET_KEY`. After Render gives the backend URL, set Netlify's
-`VITE_API_BASE_URL=https://YOUR_SERVICE.onrender.com/api` and redeploy Netlify.
+`VITE_API_BASE_URL=https://stadium-api-vrlb.onrender.com/api` and redeploy Netlify.
 
 1. Install dependencies:
    `pip install -r backend/requirements.txt`
