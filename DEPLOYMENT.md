@@ -15,6 +15,10 @@ Set these secret/environment values in the Render service:
 - `STRIPE_SECRET_KEY=sk_test_...`
 - `STRIPE_PUBLISHABLE_KEY=pk_test_...`
 - `STRIPE_WEBHOOK_SECRET=whsec_...`
+- `EMAIL_HOST=smtp.gmail.com` (or your SMTP provider)
+- `EMAIL_HOST_USER=your-email@example.com`
+- `EMAIL_HOST_PASSWORD=your-email-app-password`
+- `DEFAULT_FROM_EMAIL=your-email@example.com`
 
 Render supplies `DATABASE_URL`, and the blueprint generates
 `DJANGO_SECRET_KEY`. After Render gives the backend URL, set Netlify's

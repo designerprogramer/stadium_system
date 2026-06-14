@@ -1,11 +1,49 @@
+from unittest.mock import patch
+
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
 from django.utils import timezone
 from datetime import timedelta
 
-from .models import Notification, SupportConversation, SupportMessage, User
+from .models import Notification, RegistrationRequest, SupportConversation, SupportMessage, User
 from events.models import Event, Ticket
+
+
+class AuthenticationFlowTests(APITestCase):
+    def test_pending_registration_login_explains_email_verification(self):
+        RegistrationRequest.objects.create(
+            username='pending-user',
+            email='pending@example.com',
+            password='hashed-password',
+            otp='123456',
+            otp_expires_at=timezone.now() + timedelta(minutes=15),
+        )
+
+        response = self.client.post(
+            '/api/login/user/',
+            {'username': 'pending-user', 'password': 'password'},
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertIn('pending email verification', response.data['detail'])
+
+    @patch('accounts.views.send_otp_email', side_effect=OSError('SMTP unavailable'))
+    def test_registration_returns_clear_error_when_otp_email_fails(self, send_email):
+        response = self.client.post(
+            '/api/register/',
+            {
+                'username': 'email-failure-user',
+                'email': 'email-failure@example.com',
+                'password': 'strong-password-123',
+            },
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_503_SERVICE_UNAVAILABLE)
+        self.assertIn('OTP email could not be sent', response.data['detail'])
+        self.assertFalse(RegistrationRequest.objects.filter(username='email-failure-user').exists())
 
 
 class SupportWorkflowTests(APITestCase):

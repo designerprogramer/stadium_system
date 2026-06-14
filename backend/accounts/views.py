@@ -8,6 +8,7 @@ from django.db.models import Count, Q
 from django.utils import timezone
 from rest_framework import generics, permissions, status, viewsets
 from rest_framework.exceptions import PermissionDenied, ValidationError
+from rest_framework.exceptions import APIException
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
@@ -29,6 +30,12 @@ from .serializers import (
     UserDirectorySerializer,
     UserProfileSerializer,
 )
+
+
+class EmailDeliveryUnavailable(APIException):
+    status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+    default_detail = 'Account creation failed because the OTP email could not be sent. Please try again later.'
+    default_code = 'email_delivery_unavailable'
 
 
 def send_otp_email(email, code, subject):
@@ -92,7 +99,11 @@ class RegisterView(generics.CreateAPIView):
             },
         )
 
-        send_otp_email(data['email'], otp, 'Stadium System Registration OTP')
+        try:
+            send_otp_email(data['email'], otp, 'Stadium System Registration OTP')
+        except Exception as exc:
+            raise EmailDeliveryUnavailable() from exc
+
         return Response(
             {
                 'detail': 'Registration request received. An OTP was sent to your email.',

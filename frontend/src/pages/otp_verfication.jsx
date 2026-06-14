@@ -7,6 +7,7 @@ export default function VerifyOTP() {
   const [searchParams] = useSearchParams();
   const purpose = searchParams.get("purpose");
   const email = searchParams.get("email");
+  const otpSent = searchParams.get("sent") === "1";
 
   const [otp, setOtp] = useState("");
   const [error, setError] = useState("");
@@ -144,6 +145,11 @@ export default function VerifyOTP() {
 
         <h1 className="text-3xl font-semibold">Verify OTP</h1>
         <p className="text-gray-500 mt-2">Enter the 6-digit code sent to your email</p>
+        {purpose === "register" && otpSent && (
+          <p className="mt-5 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700">
+            Registration started successfully. Check {email} for the OTP. Your account becomes active after verification.
+          </p>
+        )}
 
         <form onSubmit={handleSubmit} className="mt-10 text-left">
 

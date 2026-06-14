@@ -38,7 +38,19 @@ class RoleTokenObtainPairSerializer(TokenObtainPairSerializer):
         return token
 
     def validate(self, attrs):
-        data = super().validate(attrs)
+        try:
+            data = super().validate(attrs)
+        except AuthenticationFailed:
+            pending_registration = RegistrationRequest.objects.filter(
+                username=attrs.get('username'),
+                verified=False,
+            ).exists()
+            if pending_registration:
+                raise AuthenticationFailed(
+                    "Your account is pending email verification. Enter the OTP sent to your email before logging in."
+                )
+            raise
+
         expected_role = self.context.get('expected_role')
         if expected_role and self.user.role != expected_role:
             raise AuthenticationFailed("This account is not allowed to log in here.")

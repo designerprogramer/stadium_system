@@ -37,14 +37,14 @@ export default function Register() {
       });
 
       navigate(
-        `/verify-otp?purpose=register&email=${encodeURIComponent(form.email)}`,
+        `/verify-otp?purpose=register&email=${encodeURIComponent(form.email)}&sent=1`,
         { replace: true }
       );
     } catch (apiError) {
       const apiData = apiError?.response?.data;
       const firstError = apiData
         ? Object.values(apiData).flat()[0]
-        : "Unable to create account. Please try again.";
+        : "Unable to reach the registration service. Please try again.";
       setError(firstError);
     } finally {
       setLoading(false);
@@ -156,7 +156,11 @@ export default function Register() {
               </div>
             </div>
 
-            {error && <p className="text-red-500 text-sm">{error}</p>}
+            {error && (
+              <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+                Registration failed: {error}
+              </p>
+            )}
 
             <button
               type="submit"
