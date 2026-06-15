@@ -154,9 +154,13 @@ export default function Register() {
             </div>
 
             {error && (
-              <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
-                Registration failed: {error}
-              </p>
+              <div
+                role="alert"
+                className="rounded-xl border border-red-200 bg-red-50 px-4 py-4 text-sm font-medium text-red-700"
+              >
+                <p className="font-semibold">Registration failed</p>
+                <p className="mt-1 text-sm font-normal">{error}</p>
+              </div>
             )}
 
             <button

@@ -1,9 +1,24 @@
 import axios from "axios";
 import { clearAuthSession, getAccessToken, getRefreshToken, updateAccessToken } from "./auth";
 
-const baseURL = import.meta.env.VITE_API_BASE_URL || (import.meta.env.DEV ? "http://127.0.0.1:8000/api" : "/api");
+const defaultProductionApiUrl = "https://stadium-api-vrlb.onrender.com/api";
+const baseURL = import.meta.env.VITE_API_BASE_URL
+  || (import.meta.env.DEV ? "http://127.0.0.1:8000/api" : defaultProductionApiUrl);
+
+if (!import.meta.env.DEV && !import.meta.env.VITE_API_BASE_URL) {
+  console.warn(
+    "VITE_API_BASE_URL is not set in production. Falling back to " +
+    `${defaultProductionApiUrl}. Set VITE_API_BASE_URL in your deploy environment ` +
+    "and redeploy to make this explicit."
+  );
+}
+
 const API = axios.create({ baseURL });
 let refreshPromise = null;
+
+if (!import.meta.env.DEV) {
+  console.debug("API baseURL:", baseURL, "VITE_API_BASE_URL:", import.meta.env.VITE_API_BASE_URL);
+}
 
 API.interceptors.request.use((config) => {
   const token = getAccessToken();
