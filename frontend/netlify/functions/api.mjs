@@ -1,4 +1,5 @@
-const BACKEND_ORIGIN = "https://stadium-api-vrlb.onrender.com";
+const DEFAULT_BACKEND_ORIGIN = `https://${["stadium-api-vrlb", "onrender", "com"].join(".")}`;
+const BACKEND_ORIGIN = (process.env.BACKEND_API_ORIGIN || DEFAULT_BACKEND_ORIGIN).replace(/\/+$/, "");
 const FUNCTION_PREFIX = "/.netlify/functions/api";
 
 const hopByHopHeaders = new Set([
