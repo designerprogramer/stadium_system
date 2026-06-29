@@ -1,0 +1,1 @@
+import{t as e}from"./jsx-runtime-B6doAwFl.js";import{t}from"./RoleLoginForm-Be90lab8.js";var n=e();function r(){return(0,n.jsx)(t,{title:`Customer Login`,roleName:`Customer`,loginEndpoint:`/login/user/`,accentClass:``})}export{r as default};

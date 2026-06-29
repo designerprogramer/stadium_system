@@ -6,16 +6,8 @@ import {
   updateAccessToken,
 } from "./auth";
 
-const configuredBaseURL = import.meta.env.VITE_API_BASE_URL;
-const productionFallbackBaseURL = `https://${["stadium-api-vrlb", "onrender", "com"].join(".")}/api`;
-
-const baseURL = import.meta.env.DEV
-  ? configuredBaseURL || "http://127.0.0.1:8000/api"
-  : configuredBaseURL || productionFallbackBaseURL;
-
-if (!baseURL) {
-  console.error("VITE_API_BASE_URL is not set.");
-}
+// Since Django + React are on same domain
+const baseURL = "/api";
 
 const API = axios.create({ baseURL });
 let refreshPromise = null;
@@ -46,7 +38,7 @@ API.interceptors.response.use(
 
       try {
         refreshPromise ||= axios
-          .post(`${baseURL}/refresh/`, { refresh: refreshToken })
+          .post(`/api/refresh/`, { refresh: refreshToken })
           .finally(() => {
             refreshPromise = null;
           });

@@ -1,0 +1,1 @@
+import{t as e}from"./jsx-runtime-B6doAwFl.js";import{t}from"./support_inbox-Bu1VkRSA.js";var n=e();function r(){return(0,n.jsx)(t,{role:`staff`})}export{r as default};
