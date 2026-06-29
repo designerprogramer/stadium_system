@@ -6,9 +6,13 @@ import {
   updateAccessToken,
 } from "./auth";
 
+const configuredBaseURL = import.meta.env.VITE_API_BASE_URL;
+
 const baseURL = import.meta.env.DEV
-  ? import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000/api"
-  : import.meta.env.VITE_API_BASE_URL;
+  ? configuredBaseURL || "http://127.0.0.1:8000/api"
+  : configuredBaseURL?.includes(".onrender.com")
+    ? "/api"
+    : configuredBaseURL || "/api";
 
 if (!baseURL) {
   console.error("VITE_API_BASE_URL is not set.");
