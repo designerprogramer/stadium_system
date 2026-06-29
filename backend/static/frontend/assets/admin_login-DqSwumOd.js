@@ -1,0 +1,1 @@
+import{t as e}from"./jsx-runtime-B6doAwFl.js";import{t}from"./RoleLoginForm-BrI8irN-.js";var n=e();function r(){return(0,n.jsx)(t,{title:`Admin Login`,roleName:`Admin`,loginEndpoint:`/login/admin/`,accentClass:`bg-slate-900 hover:bg-black`})}export{r as default};

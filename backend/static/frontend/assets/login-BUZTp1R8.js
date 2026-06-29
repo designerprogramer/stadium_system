@@ -1,0 +1,1 @@
+import{t as e}from"./jsx-runtime-B6doAwFl.js";import{t}from"./RoleLoginForm-BrI8irN-.js";var n=e();function r(){return(0,n.jsx)(t,{title:`Staff Login`,roleName:`Staff`,loginEndpoint:`/login/staff/`,accentClass:`bg-emerald-600 hover:bg-emerald-700`})}export{r as default};

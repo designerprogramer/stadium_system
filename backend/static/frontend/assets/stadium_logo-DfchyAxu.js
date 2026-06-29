@@ -1,0 +1,1 @@
+var e=`/static/frontend/assets/stadium_logo-xjyVLGRn.png`;export{e as t};
