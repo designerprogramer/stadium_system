@@ -7,13 +7,11 @@ import {
 } from "./auth";
 
 const configuredBaseURL = import.meta.env.VITE_API_BASE_URL;
-const netlifyFunctionBaseURL = "/.netlify/functions/api";
+const productionFallbackBaseURL = `https://${["stadium-api-vrlb", "onrender", "com"].join(".")}/api`;
 
 const baseURL = import.meta.env.DEV
   ? configuredBaseURL || "http://127.0.0.1:8000/api"
-  : !configuredBaseURL || configuredBaseURL === "/api" || configuredBaseURL.includes(".onrender.com")
-    ? netlifyFunctionBaseURL
-    : configuredBaseURL;
+  : configuredBaseURL || productionFallbackBaseURL;
 
 if (!baseURL) {
   console.error("VITE_API_BASE_URL is not set.");
