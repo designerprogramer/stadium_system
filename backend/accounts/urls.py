@@ -13,6 +13,10 @@ from .views import (
     ResetPasswordView,
     StaffLoginView,
     StaffDutyAssignmentViewSet,
+    TeamChatMessageViewSet,
+    TeamChatMarkReadView,
+    TeamMemberListView,
+    TeamChatUnreadCountsView,
     SupportChatbotView,
     SupportConversationAssignSelfView,
     SupportConversationDetailView,
@@ -33,6 +37,7 @@ from .views import (
 router = DefaultRouter()
 router.register('admin/users', UserManagementViewSet, basename='admin-users')
 router.register('staff-duties', StaffDutyAssignmentViewSet, basename='staff-duties')
+router.register('team-chat', TeamChatMessageViewSet, basename='team-chat')
 
 urlpatterns = [
     path('register/', RegisterView.as_view()),
@@ -49,6 +54,9 @@ urlpatterns = [
     path('me/', MeView.as_view()),
     path('me/change-password/', ChangePasswordView.as_view()),
     path('user-directory/', UserDirectoryView.as_view()),
+    path('team-members/', TeamMemberListView.as_view()),
+    path('team-chat/unread-counts/', TeamChatUnreadCountsView.as_view()),
+    path('team-chat/mark-read/', TeamChatMarkReadView.as_view()),
     path('notifications/', MyNotificationsView.as_view()),
     path('notifications/<int:pk>/mark-read/', MarkNotificationReadView.as_view()),
     path('support/my-conversation/', MySupportConversationView.as_view()),

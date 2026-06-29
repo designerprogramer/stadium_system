@@ -10,8 +10,8 @@ PostgreSQL database.
 
 Set these secret/environment values in the Render service:
 
-- `CORS_ALLOWED_ORIGINS=https://YOUR_SITE.netlify.app`
-- `CSRF_TRUSTED_ORIGINS=https://YOUR_SITE.netlify.app`
+- `CORS_ALLOWED_ORIGINS=https://digital-stadium.netlify.app`
+- `CSRF_TRUSTED_ORIGINS=https://digital-stadium.netlify.app`
 - `STRIPE_SECRET_KEY=sk_test_...`
 - `STRIPE_PUBLISHABLE_KEY=pk_test_...`
 - `STRIPE_WEBHOOK_SECRET=whsec_...`

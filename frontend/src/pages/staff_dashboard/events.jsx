@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { CalendarClock, Loader2, Pencil, Plus, Trash2, X } from "lucide-react";
 
 import API from "../../lib/api";
+import { getApiErrorMessage } from "../../lib/apiError";
 import { getCurrentUser } from "../../lib/auth";
 import DashboardPageHeader from "../../components/DashboardPageHeader";
 
@@ -141,8 +142,7 @@ export default function StaffEvents() {
       resetForm();
       await loadEvents(false);
     } catch (apiError) {
-      const detail = apiError?.response?.data;
-      setError(detail?.detail || "Unable to save event.");
+      setError(getApiErrorMessage(apiError, "Unable to save event."));
       console.error(apiError);
     } finally {
       setSubmitting(false);
@@ -178,8 +178,7 @@ export default function StaffEvents() {
       setMessage("Event deleted successfully.");
       await loadEvents(false);
     } catch (apiError) {
-      const detail = apiError?.response?.data;
-      setError(detail?.detail || "Failed to delete event.");
+      setError(getApiErrorMessage(apiError, "Failed to delete event."));
     }
   };
 

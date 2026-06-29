@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
-import { ClipboardCheck, Loader2 } from "lucide-react";
+import { CalendarCheck2, CheckCircle2, ClipboardCheck, DollarSign, Loader2, Ticket } from "lucide-react";
 
 import API from "../../lib/api";
+import DashboardPageHeader from "../../components/DashboardPageHeader";
 
 function currency(value) {
   return new Intl.NumberFormat(undefined, {
@@ -39,7 +40,7 @@ export default function Report() {
 
   if (loading) {
     return (
-      <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-slate-500">
+      <div className="dashboard-panel p-8 text-center text-slate-500">
         <Loader2 className="mx-auto mb-2 h-5 w-5 animate-spin" />
         Loading reports...
       </div>
@@ -48,7 +49,7 @@ export default function Report() {
 
   if (!data) {
     return (
-      <div className="rounded-2xl border border-rose-200 bg-rose-50 p-6 text-sm font-semibold text-rose-700">
+      <div className="dashboard-panel border-rose-200 p-6 text-sm font-semibold text-rose-700">
         Unable to load report data.
       </div>
     );
@@ -58,37 +59,30 @@ export default function Report() {
 
   return (
     <div className="space-y-6 pb-12">
-      <section className="rounded-3xl border border-indigo-200 bg-gradient-to-r from-indigo-900 via-slate-900 to-slate-800 p-6 text-white shadow-xl">
-        <p className="text-xs uppercase tracking-[0.2em] text-indigo-200">Admin Reports</p>
-        <h2 className="mt-2 text-3xl font-black">Operational Intelligence</h2>
-        <p className="mt-2 text-sm text-indigo-100">Clean report view for ticket performance and manual workflow monitoring.</p>
-      </section>
+      <DashboardPageHeader
+        eyebrow="Admin Reports"
+        title="Operational Reports"
+        description="Ticket performance, manual requests, check-ins, and external stadium booking income."
+        icon={ClipboardCheck}
+      />
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs uppercase tracking-wider text-slate-500">Tickets (Month)</p>
-          <p className="mt-2 text-2xl font-black text-slate-900">{summary.tickets_this_month}</p>
-        </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs uppercase tracking-wider text-slate-500">Revenue (Month)</p>
-          <p className="mt-2 text-2xl font-black text-emerald-700">{currency(summary.revenue_this_month)}</p>
-        </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs uppercase tracking-wider text-slate-500">Check-ins</p>
-          <p className="mt-2 text-2xl font-black text-slate-900">{summary.checkins_this_month}</p>
-        </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs uppercase tracking-wider text-slate-500">Pending Events</p>
-          <p className="mt-2 text-2xl font-black text-amber-700">{summary.pending_events}</p>
-        </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs uppercase tracking-wider text-slate-500">Pending Manual</p>
-          <p className="mt-2 text-2xl font-black text-violet-700">{summary.pending_manual_requests}</p>
-        </div>
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
+        <Metric label="Tickets (Month)" value={summary.tickets_this_month} icon={Ticket} tone="text-blue-700 bg-blue-50" />
+        <Metric
+          label="Revenue (Month)"
+          value={currency(summary.revenue_this_month)}
+          note={`Tickets ${currency(summary.ticket_revenue_this_month)} + Bookings ${currency(summary.external_revenue_this_month)}`}
+          icon={DollarSign}
+          tone="text-emerald-700 bg-emerald-50"
+        />
+        <Metric label="External Bookings" value={summary.external_bookings_this_month || 0} icon={CalendarCheck2} tone="text-cyan-700 bg-cyan-50" />
+        <Metric label="Check-ins" value={summary.checkins_this_month} icon={CheckCircle2} tone="text-violet-700 bg-violet-50" />
+        <Metric label="Pending Events" value={summary.pending_events} accent="text-amber-700" icon={ClipboardCheck} tone="text-amber-700 bg-amber-50" />
+        <Metric label="Pending Manual" value={summary.pending_manual_requests} accent="text-violet-700" icon={Ticket} tone="text-violet-700 bg-violet-50" />
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[1.4fr_1fr]">
-        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <section className="dashboard-panel p-6">
           <h3 className="text-lg font-bold text-slate-900">Event Performance</h3>
           <div className="mt-4 overflow-x-auto">
             <table className="w-full min-w-[640px] text-left text-sm">
@@ -114,7 +108,7 @@ export default function Report() {
           </div>
         </section>
 
-        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <section className="dashboard-panel p-6">
           <div className="mb-4 flex items-center gap-2">
             <ClipboardCheck className="h-5 w-5 text-indigo-700" />
             <h3 className="text-lg font-bold text-slate-900">Recent Manual Requests</h3>
@@ -128,7 +122,7 @@ export default function Report() {
             )}
 
             {data.manual_requests.map((item) => (
-                <div key={item.id} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                <div key={item.id} className="rounded-xl border border-slate-200 bg-white p-3">
                   <div className="flex items-start justify-between gap-2">
                     <div>
                       <p className="text-sm font-bold text-slate-800">
@@ -149,6 +143,59 @@ export default function Report() {
           </div>
         </section>
       </div>
+
+      <section className="dashboard-panel p-6">
+        <h3 className="text-lg font-bold text-slate-900">External Stadium Booking Income</h3>
+        <div className="mt-4 overflow-x-auto">
+          <table className="w-full min-w-[720px] text-left text-sm">
+            <thead>
+              <tr className="border-b border-slate-200 text-slate-500">
+                <th className="pb-2 font-semibold">Booking</th>
+                <th className="pb-2 font-semibold">Organizer</th>
+                <th className="pb-2 font-semibold">Scheduled</th>
+                <th className="pb-2 font-semibold">Reference</th>
+                <th className="pb-2 font-semibold">Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(data.external_bookings || []).length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="py-4 text-sm text-slate-500">
+                    No paid external stadium bookings this month.
+                  </td>
+                </tr>
+              ) : (
+                data.external_bookings.map((booking) => (
+                  <tr key={booking.id} className="border-b border-slate-100 last:border-b-0">
+                    <td className="py-2 font-semibold text-slate-800">{booking.title}</td>
+                    <td className="py-2 text-slate-600">{booking.organizer_name}</td>
+                    <td className="py-2 text-slate-600">{new Date(booking.scheduled_at).toLocaleString()}</td>
+                    <td className="py-2 text-slate-600">{booking.payment_reference || "N/A"}</td>
+                    <td className="py-2 font-semibold text-emerald-700">{currency(booking.amount_paid)}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
     </div>
+  );
+}
+
+function Metric({ label, value, note, accent = "text-slate-900", icon: Icon, tone = "text-slate-700 bg-slate-50" }) {
+  return (
+    <article className="dashboard-panel p-4">
+      <div className="flex items-start justify-between gap-3">
+        <p className="text-xs font-semibold text-slate-500">{label}</p>
+        {Icon && (
+          <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${tone}`}>
+            <Icon className="h-4 w-4" />
+          </span>
+        )}
+      </div>
+      <p className={`mt-3 text-2xl font-bold ${accent}`}>{value ?? 0}</p>
+      {note && <p className="mt-2 text-[11px] leading-5 text-slate-500">{note}</p>}
+    </article>
   );
 }

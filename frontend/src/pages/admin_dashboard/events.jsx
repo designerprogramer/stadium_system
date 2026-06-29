@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Calendar, Loader2, Pencil, Plus, Trash2, X } from "lucide-react";
 
 import API from "../../lib/api";
+import { getApiErrorMessage } from "../../lib/apiError";
 import DashboardPageHeader from "../../components/DashboardPageHeader";
 
 const BASE_FORM = {
@@ -135,8 +136,7 @@ export default function AdminEvents() {
       clearForm();
       await loadEvents(false);
     } catch (apiError) {
-      const detail = apiError?.response?.data;
-      setError(detail?.detail || "Failed to save event.");
+      setError(getApiErrorMessage(apiError, "Failed to save event."));
     } finally {
       setSaving(false);
     }
@@ -174,7 +174,7 @@ export default function AdminEvents() {
       setMessage("Event deleted.");
       await loadEvents(false);
     } catch (apiError) {
-      setError(apiError?.response?.data?.detail || "Failed to delete event.");
+      setError(getApiErrorMessage(apiError, "Failed to delete event."));
     } finally {
       setSaving(false);
     }
@@ -190,7 +190,7 @@ export default function AdminEvents() {
       setMessage(`Event ${status}.`);
       await loadEvents(false);
     } catch (apiError) {
-      setError(apiError?.response?.data?.detail || "Failed to update status.");
+      setError(getApiErrorMessage(apiError, "Failed to update status."));
     } finally {
       setSaving(false);
     }

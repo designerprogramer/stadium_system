@@ -67,7 +67,7 @@ export default function Events() {
                       <div className="grid items-center gap-4 md:grid-cols-[1fr_110px]">
                         <div className="flex min-w-0 items-center gap-3">
                         {event.image && (
-                          <img src={event.image} alt={event.title} className="h-12 w-12 rounded-xl border border-slate-200 object-contain p-1" />
+                          <img src={event.image} alt={event.title} className="h-12 w-12 rounded-full border border-slate-200 object-cover" />
                         )}
                         <div className="min-w-0">
                           <h3 className="truncate text-base font-bold text-slate-950">{event.title}</h3>

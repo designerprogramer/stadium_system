@@ -6,9 +6,10 @@ export function getApiErrorMessage(error, fallback) {
   if (typeof data === "string" && data.trim()) {
     const normalized = data.trim();
     if (normalized.startsWith("<!DOCTYPE html>") || normalized.toLowerCase().includes("<html")) {
-      return requestUrl
-        ? `Received HTML from ${requestUrl}. This usually means the API request was routed to the static frontend host instead of the backend. Check VITE_API_BASE_URL and rebuild.`
-        : "Received an unexpected HTML response from the backend. Check VITE_API_BASE_URL and your build configuration.";
+      const titleMatch = normalized.match(/<title>([\s\S]*?)<\/title>/i);
+      const titleText = titleMatch ? titleMatch[1].trim() : "";
+      const bodyText = normalized.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 180);
+      return `HTML Error [${titleText || "No Title"}]: ${bodyText}... (URL: ${requestUrl})`;
     }
     return normalized;
   }

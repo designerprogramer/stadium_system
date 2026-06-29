@@ -3,6 +3,7 @@ import { CalendarClock, Loader2, Search } from "lucide-react";
 
 import DashboardPageHeader from "../../components/DashboardPageHeader";
 import API from "../../lib/api";
+import { getApiErrorMessage } from "../../lib/apiError";
 
 function formatDate(value) {
   if (!value) return "Not set";
@@ -73,7 +74,7 @@ export default function ScheduleCalendar({ role }) {
       });
       setAvailability(response.data);
     } catch (apiError) {
-      setError(apiError?.response?.data?.detail || "Failed to check availability.");
+      setError(getApiErrorMessage(apiError, "Failed to check availability."));
     } finally {
       setChecking(false);
     }

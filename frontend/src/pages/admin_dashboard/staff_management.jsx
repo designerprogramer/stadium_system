@@ -90,12 +90,45 @@ export default function StaffManagement() {
     setError("");
     setMessage("");
 
+    const selectedStaff = Number(form.staff);
+    const startsAt = new Date(form.starts_at);
+    const endsAt = new Date(form.ends_at);
+
+    // Look for conflicting overlapping duties
+    const conflictingDuties = duties.filter((d) => 
+      Number(d.staff) === selectedStaff &&
+      new Date(d.starts_at) < endsAt &&
+      new Date(d.ends_at) > startsAt
+    );
+
+    if (conflictingDuties.length > 0) {
+      const confirmRemove = window.confirm(
+        `Shaqaalahani wuxuu horey u lahaa shaqo kale waqtigan. Ma rabtaa in laga saaro shaqadii hore si loo siiyo shaqadan cusub?\n\nThis staff member already has a duty in this time window. Do you want to remove the existing duty to assign this new one?`
+      );
+      if (!confirmRemove) {
+        setSaving(false);
+        return;
+      }
+
+      try {
+        // Delete all conflicting duties in real-time
+        for (const conf of conflictingDuties) {
+          await API.delete(`/staff-duties/${conf.id}/`);
+        }
+      } catch (err) {
+        console.error(err);
+        setError("Ku guuldareystay in laga saaro shaqadii hore.");
+        setSaving(false);
+        return;
+      }
+    }
+
     const payload = {
       ...form,
-      staff: Number(form.staff),
+      staff: selectedStaff,
       event: form.event ? Number(form.event) : null,
-      starts_at: new Date(form.starts_at).toISOString(),
-      ends_at: new Date(form.ends_at).toISOString(),
+      starts_at: startsAt.toISOString(),
+      ends_at: endsAt.toISOString(),
     };
 
     try {

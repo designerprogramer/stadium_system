@@ -568,3 +568,61 @@ class TicketLifecycleTests(APITestCase):
         self.assertFalse(ticket.is_paid)
         self.assertEqual(ticket.payment_status, 'refunded')
         self.assertIsNone(ticket.qr_code_hash)
+
+
+class RevenueReportAndDashboardTests(APITestCase):
+    def setUp(self):
+        self.admin = User.objects.create_user(username='rev-admin', password='pass', role='admin')
+        self.staff = User.objects.create_user(username='rev-staff', password='pass', role='staff')
+        self.customer = User.objects.create_user(username='rev-customer', password='pass', role='user')
+        self.event = Event.objects.create(
+            title='League Match',
+            description='A regular league event.',
+            date=timezone.now() + timedelta(days=2),
+            location='Main Stadium',
+            status='approved',
+            created_by=self.admin,
+        )
+        # Create a paid ticket for $4.00
+        self.ticket = Ticket.objects.create(
+            user=self.customer,
+            event=self.event,
+            seat_type='Normal',
+            price='4.00',
+            is_paid=True,
+            payment_status='paid',
+            qr_code_hash='qr-hash-1',
+        )
+        # Create an external stadium booking for $15.00
+        self.booking = ExternalStadiumBooking.objects.create(
+            organizer_name='Local School',
+            contact_phone='+252611111111',
+            team1_name='School A',
+            team2_name='School B',
+            scheduled_at=timezone.now() + timedelta(days=3),
+            amount_paid='15.00',
+            payment_reference='REF-555',
+            created_by=self.admin,
+        )
+
+    def test_staff_dashboard_stats_includes_bookings(self):
+        self.client.force_authenticate(self.staff)
+        response = self.client.get(reverse('staff_dashboard_stats'))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        # Total revenue should be ticket ($4.00) + booking ($15.00) = $19.00
+        self.assertEqual(response.data['total_revenue'], 19.00)
+
+    def test_event_history_report_includes_bookings(self):
+        self.client.force_authenticate(self.admin)
+        response = self.client.get(reverse('event_history_report'))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        # Total revenue should be ticket ($4.00) + booking ($15.00) = $19.00
+        self.assertEqual(response.data['summary']['revenue'], 19.00)
+
+        # Verify that booking record is returned
+        records = response.data['records']
+        booking_records = [r for r in records if r['event_id'] == f"booking-{self.booking.id}"]
+        self.assertEqual(len(booking_records), 1)
+        self.assertEqual(booking_records[0]['title'], 'School A vs School B (Stadium Booking)')
+        self.assertEqual(booking_records[0]['revenue'], 15.00)
+

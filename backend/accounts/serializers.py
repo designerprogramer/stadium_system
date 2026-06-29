@@ -3,7 +3,7 @@ from rest_framework import serializers
 from rest_framework.exceptions import AuthenticationFailed
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
-from .models import Notification, RegistrationRequest, StaffDutyAssignment, SupportConversation, SupportMessage, User
+from .models import Notification, RegistrationRequest, StaffDutyAssignment, SupportConversation, SupportMessage, User, TeamChatMessage
 
 
 class RegisterSerializer(serializers.Serializer):
@@ -262,3 +262,13 @@ class SupportConversationDetailSerializer(SupportConversationListSerializer):
 
     class Meta(SupportConversationListSerializer.Meta):
         fields = SupportConversationListSerializer.Meta.fields + ['messages']
+
+
+class TeamChatMessageSerializer(serializers.ModelSerializer):
+    sender_details = UserSerializer(source='sender', read_only=True)
+    recipient_details = UserSerializer(source='recipient', read_only=True)
+
+    class Meta:
+        model = TeamChatMessage
+        fields = ['id', 'sender', 'sender_details', 'recipient', 'recipient_details', 'message', 'created_at']
+        read_only_fields = ['id', 'sender', 'sender_details', 'recipient_details', 'created_at']

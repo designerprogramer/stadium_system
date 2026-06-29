@@ -1,5 +1,5 @@
 import { NavLink } from "react-router-dom";
-import { CalendarCheck2, CalendarClock, CalendarDays, Home, MessageSquare, QrCode, Ticket } from "lucide-react";
+import { CalendarCheck2, CalendarClock, CalendarDays, Home, MessageSquare, MessageCircle, QrCode, Ticket } from "lucide-react";
 import stadiumLogo from "../../assets/stadium_logo.png";
 
 const navItems = [
@@ -9,6 +9,7 @@ const navItems = [
   { to: "events", icon: CalendarDays, label: "Events" },
   { to: "schedule", icon: CalendarClock, label: "Schedule" },
   { to: "external-bookings", icon: CalendarCheck2, label: "Stadium Bookings" },
+  { to: "team-chat", icon: MessageCircle, label: "Team Chat" },
   { to: "support", icon: MessageSquare, label: "Support" },
 ];
 

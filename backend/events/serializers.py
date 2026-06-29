@@ -61,6 +61,8 @@ class TicketSerializer(serializers.ModelSerializer):
             'event',
             'event_details',
             'seat_type',
+            'section',
+            'seat_number',
             'price',
             'qr_code_hash',
             'is_paid',
@@ -103,6 +105,8 @@ class ManualTicketRequestSerializer(serializers.ModelSerializer):
             'event',
             'event_details',
             'seat_type',
+            'section',
+            'seat_number',
             'reason',
             'status',
             'admin_note',
@@ -160,6 +164,23 @@ class ManualTicketRequestSerializer(serializers.ModelSerializer):
         attrs['target_user'] = target_user
         attrs['target_username'] = username
         attrs['target_full_name'] = attrs.get('target_full_name', '').strip()
+
+        event = attrs.get('event')
+        if event and Ticket.objects.filter(user=target_user, event=event, is_paid=True).exists():
+            raise serializers.ValidationError('This user already has a ticket for this event.')
+
+        seat_type = attrs.get('seat_type')
+        section = attrs.get('section')
+        seat_number = attrs.get('seat_number')
+        if section is None or seat_number is None:
+            raise serializers.ValidationError('Section and seat number are required.')
+        if section != 1:
+            raise serializers.ValidationError({'section': f'{seat_type} has one section only.'})
+
+        max_seat = 100 if seat_type == 'VIP' else 600
+        if not (1 <= seat_number <= max_seat):
+            raise serializers.ValidationError({'seat_number': f'{seat_type} seat number must be between 1 and {max_seat}.'})
+
         return attrs
 
 

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { CheckCircle2, Loader2, XCircle } from "lucide-react";
 
 import API from "../../lib/api";
+import { getApiErrorMessage } from "../../lib/apiError";
 import DashboardPageHeader from "../../components/DashboardPageHeader";
 
 function statusClass(status) {
@@ -61,8 +62,7 @@ export default function AdminManualTickets() {
       setMessage(`Request ${status === "approved" ? "approved" : "revoked"}.`);
       await loadRequests(false);
     } catch (apiError) {
-      const detail = apiError?.response?.data;
-      setError(detail?.detail || "Failed to review manual ticket request.");
+      setError(getApiErrorMessage(apiError, "Failed to review manual ticket request."));
     } finally {
       setProcessingId(null);
     }

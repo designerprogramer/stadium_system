@@ -103,7 +103,7 @@ export default function StaffDashboard() {
 
   const metrics = [
     {
-      label: "Ticket Revenue",
+      label: "Total Revenue",
       value: money(stats.total_revenue),
       trend: stats.trends?.revenue,
       icon: DollarSign,
@@ -233,7 +233,7 @@ export default function StaffDashboard() {
               ))}
             </div>
 
-            <p className="mt-5 text-center text-[11px] font-semibold text-slate-500">Paid ticket revenue by month</p>
+            <p className="mt-5 text-center text-[11px] font-semibold text-slate-500">Total revenue by month</p>
           </article>
 
           {/* Active Duties */}

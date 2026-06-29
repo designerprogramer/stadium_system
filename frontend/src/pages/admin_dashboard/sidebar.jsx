@@ -1,12 +1,14 @@
 import { NavLink } from "react-router-dom";
 import {
   BarChart3,
+  ClipboardCheck,
   Calendar,
   CalendarCheck2,
   CalendarClock,
   History,
   Home,
   MessageSquare,
+  MessageCircle,
   Ticket,
   UserCog,
   Users,
@@ -16,6 +18,7 @@ import stadiumLogo from "../../assets/stadium_logo.png";
 const navItems = [
   { to: "dashboard", icon: Home, label: "Dashboard" },
   { to: "finance", icon: BarChart3, label: "Finance" },
+  { to: "report", icon: ClipboardCheck, label: "Reports" },
   { to: "events", icon: Calendar, label: "Events" },
   { to: "schedule", icon: CalendarClock, label: "Calendar" },
   { to: "external-bookings", icon: CalendarCheck2, label: "Stadium Bookings" },
@@ -23,6 +26,7 @@ const navItems = [
   { to: "manual-tickets", icon: Ticket, label: "Manual Tickets" },
   { to: "staff-management", icon: UserCog, label: "Staff" },
   { to: "users", icon: Users, label: "Users" },
+  { to: "team-chat", icon: MessageCircle, label: "Team Chat" },
   { to: "support", icon: MessageSquare, label: "Support" },
 ];
 

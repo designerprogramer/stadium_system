@@ -44,6 +44,8 @@ class Ticket(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='tickets')
     event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name='tickets')
     seat_type = models.CharField(max_length=10, choices=SEAT_CHOICES)
+    section = models.IntegerField(null=True, blank=True)
+    seat_number = models.IntegerField(null=True, blank=True)
     price = models.DecimalField(max_digits=10, decimal_places=2)
     qr_code_hash = models.CharField(max_length=255, blank=True, null=True)
     is_paid = models.BooleanField(default=False)
@@ -60,9 +62,9 @@ class Ticket(models.Model):
     class Meta:
         constraints = [
             models.UniqueConstraint(
-                fields=['user', 'event'],
+                fields=['event', 'seat_type', 'section', 'seat_number'],
                 condition=models.Q(is_paid=True),
-                name='unique_paid_ticket_per_user_event',
+                name='unique_paid_seat_per_event',
             ),
         ]
     
@@ -112,6 +114,8 @@ class ManualTicketRequest(models.Model):
     )
     event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name='manual_ticket_requests')
     seat_type = models.CharField(max_length=10, choices=Ticket.SEAT_CHOICES)
+    section = models.IntegerField(null=True, blank=True)
+    seat_number = models.IntegerField(null=True, blank=True)
     reason = models.TextField(blank=True)
     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='pending')
     admin_note = models.TextField(blank=True)

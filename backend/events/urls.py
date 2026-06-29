@@ -11,6 +11,7 @@ from .views import (
     confirm_ticket,
     create_payment_intent,
     event_history_report,
+    event_booked_seats,
     my_tickets,
     public_upcoming_events,
     refund_ticket,
@@ -28,6 +29,7 @@ router.register(r'', EventViewSet, basename='event')
 
 urlpatterns = [
     path('public-upcoming/', public_upcoming_events, name='public_upcoming_events'),
+    path('<int:event_id>/booked-seats/', event_booked_seats, name='event_booked_seats'),
     path(
         'external-bookings/',
         ExternalStadiumBookingViewSet.as_view({'get': 'list', 'post': 'create'}),

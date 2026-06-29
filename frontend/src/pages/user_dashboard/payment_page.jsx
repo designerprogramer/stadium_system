@@ -1,72 +1,92 @@
-import { useEffect, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 import { loadStripe } from "@stripe/stripe-js";
-import { Elements, PaymentElement, useStripe, useElements } from "@stripe/react-stripe-js";
+import { Elements, PaymentElement, useElements, useStripe } from "@stripe/react-stripe-js";
 import { CreditCard, XCircle } from "lucide-react";
-import API from "../../lib/api";
+
 import DashboardPageHeader from "../../components/DashboardPageHeader";
+import API from "../../lib/api";
 
 const stripePublishableKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY?.trim();
 const stripePromise = stripePublishableKey ? loadStripe(stripePublishableKey) : null;
 
-const CheckoutForm = ({ ticketId, onSuccess }) => {
+const SEAT_CONFIG = {
+  VIP: { count: 25, price: "3.00", label: "25 kursi oo VIP ah" },
+  Normal: { count: 50, price: "1.00", label: "50 kursi oo caadi ah" },
+};
+
+function CheckoutForm({ ticketId, onSuccess }) {
   const stripe = useStripe();
   const elements = useElements();
-  const [error, setError] = useState(null);
+  const [error, setError] = useState("");
   const [processing, setProcessing] = useState(false);
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!stripe || !elements) return;
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    if (!stripe || !elements || processing) return;
 
     setProcessing(true);
+    setError("");
 
     const { error: stripeError, paymentIntent } = await stripe.confirmPayment({
       elements,
-      redirect: 'if_required',
+      redirect: "if_required",
     });
 
     if (stripeError) {
-      setError(stripeError.message);
+      setError(stripeError.message || "Payment failed.");
       setProcessing(false);
-    } else if (paymentIntent && paymentIntent.status === 'succeeded') {
+      return;
+    }
+
+    if (paymentIntent?.status === "succeeded") {
       try {
         await API.post("/events/confirm-ticket/", { ticket_id: ticketId });
         onSuccess();
-      } catch (err) {
-        setError(err?.response?.data?.error || "Failed to confirm ticket with server.");
+      } catch (apiError) {
+        setError(apiError?.response?.data?.error || "Failed to confirm ticket with server.");
         setProcessing(false);
       }
+      return;
     }
+
+    setError(`Payment status is ${paymentIntent?.status || "unknown"}.`);
+    setProcessing(false);
   };
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       <PaymentElement />
-      {error && <div className="text-red-500 text-sm mt-2 font-medium">{error}</div>}
+      {error && <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700">{error}</div>}
       <button
         type="submit"
         disabled={!stripe || processing}
-        className="w-full bg-blue-600 text-white font-bold py-4 rounded-xl hover:bg-blue-700 transition-colors disabled:opacity-50"
+        className="w-full rounded-xl bg-blue-600 py-4 font-bold text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
       >
         {processing ? "Processing..." : "Pay Now"}
       </button>
     </form>
   );
-};
+}
 
 export default function PaymentPage() {
   const { eventId } = useParams();
   const navigate = useNavigate();
-  const [seatType, setSeatType] = useState("");
+
+  const [event, setEvent] = useState(null);
+  const [eventLoading, setEventLoading] = useState(true);
+  const [pageLoadedAt] = useState(() => Date.now());
+  const [error, setError] = useState("");
+
+  const [chosenSeatType, setChosenSeatType] = useState("");
+  const [bookedSeats, setBookedSeats] = useState([]);
+  const [selectedSeatNumber, setSelectedSeatNumber] = useState("");
+  const [loadingSeats, setLoadingSeats] = useState(false);
+  const [loadingPayment, setLoadingPayment] = useState(false);
+
   const [clientSecret, setClientSecret] = useState("");
   const [ticketId, setTicketId] = useState(null);
   const [showPopup, setShowPopup] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [event, setEvent] = useState(null);
-  const [eventLoading, setEventLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [pageLoadedAt] = useState(() => Date.now());
 
   useEffect(() => {
     const loadEvent = async () => {
@@ -87,42 +107,77 @@ export default function PaymentPage() {
   }, [eventId]);
 
   const eventExpired = event ? new Date(event.date).getTime() <= pageLoadedAt : false;
-  const hasPurchased = Boolean(event?.has_purchased);
+  const selectedConfig = chosenSeatType ? SEAT_CONFIG[chosenSeatType] : null;
 
-  const handleSeatSelection = async (type) => {
+  const bookedSeatCount = useMemo(() => {
+    if (!chosenSeatType) return 0;
+    return bookedSeats.filter((seat) => seat.seat_type === chosenSeatType && seat.section === 1).length;
+  }, [bookedSeats, chosenSeatType]);
+
+  const occupiedSeats = useMemo(() => {
+    return new Set(
+      bookedSeats
+        .filter((seat) => seat.seat_type === chosenSeatType && seat.section === 1)
+        .map((seat) => Number(seat.seat_number))
+    );
+  }, [bookedSeats, chosenSeatType]);
+
+  const loadBookedSeats = async () => {
+    setLoadingSeats(true);
+    setError("");
+    try {
+      const response = await API.get(`/events/${eventId}/booked-seats/`);
+      setBookedSeats(response.data);
+    } catch (apiError) {
+      console.error(apiError);
+      setError("Waa la soo rari waayay macluumaadka kuraasta.");
+    } finally {
+      setLoadingSeats(false);
+    }
+  };
+
+  const selectSeatType = (type) => {
+    setChosenSeatType(type);
+    setSelectedSeatNumber("");
+    setClientSecret("");
+    setTicketId(null);
+    loadBookedSeats();
+  };
+
+  const startPayment = async () => {
     if (!stripePromise) {
       setError("Stripe is not configured. Set VITE_STRIPE_PUBLISHABLE_KEY and restart the frontend.");
       return;
     }
+    if (!chosenSeatType || !selectedSeatNumber) return;
 
-    setSeatType(type);
-    setLoading(true);
+    setLoadingPayment(true);
+    setError("");
     try {
       const response = await API.post("/events/create-payment-intent/", {
         event_id: eventId,
-        seat_type: type
+        seat_type: chosenSeatType,
+        section: 1,
+        seat_number: Number(selectedSeatNumber),
       });
+
       if (response.data.alreadyPaid) {
         setTicketId(response.data.ticket_id);
         setShowPopup(true);
         return;
       }
+
       setClientSecret(response.data.clientSecret);
       setTicketId(response.data.ticket_id);
-    } catch (err) {
-      console.error(err);
-      setSeatType("");
-      setError(err?.response?.data?.error || "Failed to initialize payment.");
+    } catch (apiError) {
+      console.error(apiError);
+      setError(apiError?.response?.data?.error || "Failed to initialize payment.");
     } finally {
-      setLoading(false);
+      setLoadingPayment(false);
     }
   };
 
-  const handleSuccess = () => {
-    setShowPopup(true);
-  };
-
-  const changeSeatType = async () => {
+  const changeSeat = async () => {
     if (ticketId) {
       try {
         await API.post("/events/cancel-payment-intent/", { ticket_id: ticketId });
@@ -131,14 +186,11 @@ export default function PaymentPage() {
         return;
       }
     }
+
     setClientSecret("");
     setTicketId(null);
-    setSeatType("");
-  };
-
-  const closePopup = () => {
-    setShowPopup(false);
-    navigate("/user/ticket");
+    setSelectedSeatNumber("");
+    await loadBookedSeats();
   };
 
   return (
@@ -146,138 +198,213 @@ export default function PaymentPage() {
       <DashboardPageHeader
         eyebrow="Checkout"
         title="Complete Payment"
-        description="Choose a seat type and complete secure payment for your ticket."
+        description="Dooro nooca kursiga iyo lambarka kursiga, kadib dhameystir lacag bixinta."
         icon={CreditCard}
       />
 
-      <div className="mx-auto max-w-xl rounded-2xl border border-gray-100 bg-white p-8 shadow-sm">
+      <div className="mx-auto max-w-3xl rounded-2xl border border-gray-100 bg-white p-6 shadow-sm sm:p-8">
         {eventLoading ? (
           <p className="text-center text-sm font-semibold text-slate-500">Loading event...</p>
         ) : error ? (
-          <div className="space-y-4 text-center">
-            <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">
-              {error}
-            </div>
-            <button
-              type="button"
-              onClick={() => navigate("/user/events")}
-              className="rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800"
-            >
-              Back to events
-            </button>
-          </div>
-        ) : hasPurchased ? (
-          <div className="text-center">
-            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-600">
-              <CreditCard className="h-7 w-7" />
-            </div>
-            <h2 className="mt-4 text-lg font-bold text-slate-950">You bought this ticket</h2>
-            <p className="mt-2 text-sm leading-6 text-slate-500">
-              You already have a pass for this event. Open your passes page to view the QR code.
-            </p>
-            <button
-              type="button"
-              onClick={() => navigate("/user/ticket")}
-              className="mt-5 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800"
-            >
-              View my pass
-            </button>
-          </div>
+          <ErrorState message={error} onBack={() => navigate("/user/events")} />
         ) : eventExpired ? (
-          <div className="text-center">
-            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100 text-slate-500">
-              <XCircle className="h-7 w-7" />
+          <ExpiredState onBack={() => navigate("/user/events")} />
+        ) : !chosenSeatType ? (
+          <div>
+            <h2 className="mb-4 text-lg font-bold text-gray-700">Dooro nooca kursiga</h2>
+            <div className="space-y-4">
+              {Object.entries(SEAT_CONFIG).map(([type, config]) => (
+                <button
+                  key={type}
+                  type="button"
+                  onClick={() => selectSeatType(type)}
+                  className="flex w-full items-center justify-between rounded-xl border-2 border-gray-100 bg-gray-50/50 p-4 text-left transition-colors hover:border-sky-400"
+                >
+                  <div>
+                    <div className="text-lg font-black text-gray-900">{type} Seat</div>
+                    <div className="text-sm font-medium text-gray-500">{config.label}</div>
+                  </div>
+                  <div className="text-2xl font-black text-blue-600">${config.price}</div>
+                </button>
+              ))}
             </div>
-            <h2 className="mt-4 text-lg font-bold text-slate-950">Event expired</h2>
-            <p className="mt-2 text-sm leading-6 text-slate-500">
-              Ticket sales are closed because this event time has passed.
-            </p>
-            <button
-              type="button"
-              onClick={() => navigate("/user/events")}
-              className="mt-5 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800"
-            >
-              Back to events
-            </button>
           </div>
         ) : !clientSecret ? (
-          <div>
-            <h2 className="text-lg font-bold text-gray-700 mb-4">Select Seat Type</h2>
-            <div className="space-y-4">
-              <button 
-                onClick={() => handleSeatSelection("VIP")}
-                disabled={loading}
-                className="w-full border-2 border-blue-100 p-4 rounded-xl flex justify-between items-center hover:border-blue-500 transition-colors bg-blue-50/30"
+          <div className="space-y-6">
+            <div className="flex items-center justify-between gap-4 border-b border-gray-100 pb-3">
+              <h3 className="text-base font-bold uppercase tracking-wide text-gray-800">
+                Doorashada kursiga {chosenSeatType}
+              </h3>
+              <button
+                type="button"
+                onClick={() => {
+                  setChosenSeatType("");
+                  setSelectedSeatNumber("");
+                }}
+                className="text-xs font-semibold text-blue-600 hover:text-blue-800"
               >
-                <div className="text-left">
-                  <div className="font-black text-gray-900 text-lg">VIP Seat</div>
-                  <div className="text-sm text-gray-500 font-medium">Premium view & access</div>
-                </div>
-                <div className="font-black text-blue-600 text-2xl">$3</div>
-              </button>
-
-              <button 
-                onClick={() => handleSeatSelection("Normal")}
-                disabled={loading}
-                className="w-full border-2 border-gray-100 p-4 rounded-xl flex justify-between items-center hover:border-gray-300 transition-colors bg-gray-50/50"
-              >
-                <div className="text-left">
-                  <div className="font-black text-gray-900 text-lg">Normal Seat</div>
-                  <div className="text-sm text-gray-500 font-medium">Standard stadium seating</div>
-                </div>
-                <div className="font-black text-gray-600 text-2xl">$1</div>
+                Beddel nooca
               </button>
             </div>
-            {loading && <p className="mt-4 text-center text-gray-500 font-medium">Initializing secure payment...</p>}
+
+            {loadingSeats ? (
+              <p className="text-center text-sm font-semibold text-slate-500">Soo raraya macluumaadka kuraasta...</p>
+            ) : (
+              <>
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Dooro lambarka kursiga</p>
+                  <p className="text-xs font-semibold text-slate-500">
+                    {bookedSeatCount}/{selectedConfig.count} xiran
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-4 border-b border-slate-100 pb-3 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                  <LegendSwatch className="border border-slate-200 bg-white" label="La heli karo" />
+                  <LegendSwatch className="bg-sky-600" label="La doortay" />
+                  <LegendSwatch className="border border-rose-200 bg-rose-100" label="Xiran" />
+                </div>
+
+                <div className="grid max-h-[430px] grid-cols-6 gap-1.5 overflow-y-auto rounded-xl border border-slate-100 bg-slate-50/50 p-1.5 sm:grid-cols-10 md:grid-cols-12">
+                  {Array.from({ length: selectedConfig.count }, (_, index) => {
+                    const seatNumber = index + 1;
+                    const isOccupied = occupiedSeats.has(seatNumber);
+                    const isSelected = Number(selectedSeatNumber) === seatNumber;
+
+                    return (
+                      <button
+                        key={seatNumber}
+                        type="button"
+                        disabled={isOccupied}
+                        onClick={() => setSelectedSeatNumber(String(seatNumber))}
+                        className={`h-10 rounded-lg border text-xs font-extrabold transition ${
+                          isOccupied
+                            ? "cursor-not-allowed border-rose-200 bg-rose-100 text-rose-400"
+                            : isSelected
+                              ? "border-sky-600 bg-sky-600 text-white shadow-sm"
+                              : "border-slate-200 bg-white text-slate-700 hover:border-slate-400"
+                        }`}
+                      >
+                        {seatNumber}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {selectedSeatNumber && (
+                  <button
+                    type="button"
+                    onClick={startPayment}
+                    disabled={loadingPayment}
+                    className="w-full rounded-xl bg-sky-600 py-3.5 font-bold text-white transition hover:bg-sky-700 disabled:bg-slate-400"
+                  >
+                    {loadingPayment ? "Diyaarinaya lacag bixinta..." : `U gudbi lacag bixinta ($${selectedConfig.price})`}
+                  </button>
+                )}
+              </>
+            )}
           </div>
         ) : (
           <div>
-            <div className="bg-gray-50 p-4 rounded-xl mb-6">
-              <div className="flex justify-between text-gray-600 mb-2">
-                <span>Selected Seat</span>
-                <span className="font-bold text-gray-900">{seatType}</span>
+            <div className="mb-6 rounded-xl bg-gray-50 p-4">
+              <div className="mb-2 flex justify-between text-gray-600">
+                <span>Kursiga</span>
+                <span className="font-bold text-gray-900">
+                  {chosenSeatType} | Seat {selectedSeatNumber}
+                </span>
               </div>
-              <div className="flex justify-between text-gray-600 border-t border-gray-200 pt-2">
+              <div className="flex justify-between border-t border-gray-200 pt-2 text-gray-600">
                 <span>Total Amount</span>
-                <span className="font-black text-blue-600 text-xl">${seatType === 'VIP' ? '3.00' : '1.00'}</span>
+                <span className="text-xl font-black text-blue-600">${selectedConfig.price}</span>
               </div>
             </div>
 
             <Elements stripe={stripePromise} options={{ clientSecret }}>
-              <CheckoutForm ticketId={ticketId} onSuccess={handleSuccess} />
+              <CheckoutForm ticketId={ticketId} onSuccess={() => setShowPopup(true)} />
             </Elements>
-            
-            <button 
-              onClick={changeSeatType}
-              className="mt-4 text-sm font-bold text-gray-500 hover:text-gray-800 transition-colors w-full text-center"
+
+            <button
+              type="button"
+              onClick={changeSeat}
+              className="mt-4 w-full text-center text-sm font-bold text-gray-500 transition-colors hover:text-gray-800"
             >
-              Change Seat Type
+              Beddel kursiga
             </button>
           </div>
         )}
       </div>
 
       {showPopup && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="bg-white max-w-sm w-full p-8 rounded-3xl text-center shadow-2xl animate-in fade-in zoom-in duration-300">
-            <div className="w-16 h-16 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-4">
-              <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-3xl bg-white p-8 text-center shadow-2xl">
+            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-green-100 text-green-600">
+              <svg className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
               </svg>
             </div>
-            <h3 className="text-2xl font-black text-gray-900 mb-2">Success!</h3>
-            <p className="text-gray-600 font-medium leading-relaxed mb-6">
-              Payment successful. Your QR pass is ready in My Passes. Do not share the QR code with anyone.
+            <h3 className="mb-2 text-2xl font-black text-gray-900">Guul!</h3>
+            <p className="mb-6 font-medium leading-relaxed text-gray-600">
+              Lacag bixintu waa guuleysatay. Tigidhkaaga QR-ka wuxuu ku diyaarsan yahay My Tickets.
             </p>
-            <button 
-              onClick={closePopup}
-              className="w-full bg-gray-900 text-white font-bold py-3 rounded-xl hover:bg-gray-800 transition-colors"
+            <button
+              type="button"
+              onClick={() => {
+                setShowPopup(false);
+                navigate("/user/ticket");
+              }}
+              className="w-full rounded-xl bg-gray-900 py-3 font-bold text-white transition-colors hover:bg-gray-800"
             >
-              Go to My Tickets
+              Tag tigidhadaada
             </button>
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function LegendSwatch({ className, label }) {
+  return (
+    <div className="flex items-center gap-1.5">
+      <span className={`h-3.5 w-3.5 rounded ${className}`} />
+      {label}
+    </div>
+  );
+}
+
+function ErrorState({ message, onBack }) {
+  return (
+    <div className="space-y-4 text-center">
+      <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">
+        {message}
+      </div>
+      <button
+        type="button"
+        onClick={onBack}
+        className="rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800"
+      >
+        Kusoo laabo dhacdooyinka
+      </button>
+    </div>
+  );
+}
+
+function ExpiredState({ onBack }) {
+  return (
+    <div className="text-center">
+      <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100 text-slate-500">
+        <XCircle className="h-7 w-7" />
+      </div>
+      <h2 className="mt-4 text-lg font-bold text-slate-950">Dhacdadu way dhacday</h2>
+      <p className="mt-2 text-sm leading-6 text-slate-500">
+        Tigidhada lama iibin karo sababtoo ah waqtigii dhacdada waa la dhaafay.
+      </p>
+      <button
+        type="button"
+        onClick={onBack}
+        className="mt-5 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800"
+      >
+        Kusoo laabo dhacdooyinka
+      </button>
     </div>
   );
 }

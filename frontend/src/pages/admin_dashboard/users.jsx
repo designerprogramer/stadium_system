@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Loader2, Pencil, Trash2, UserPlus, X } from "lucide-react";
 
 import API from "../../lib/api";
+import { getApiErrorMessage } from "../../lib/apiError";
 import DashboardPageHeader from "../../components/DashboardPageHeader";
 
 const NEW_USER = {
@@ -76,8 +77,7 @@ export default function AdminUsers() {
       setNewUser(NEW_USER);
       await loadUsers();
     } catch (apiError) {
-      const detail = apiError?.response?.data;
-      setError(detail?.detail || detail?.password?.[0] || detail?.username?.[0] || "Failed to create user.");
+      setError(getApiErrorMessage(apiError, "Failed to create user."));
     } finally {
       setSaving(false);
     }
@@ -114,8 +114,7 @@ export default function AdminUsers() {
       setEditData(null);
       await loadUsers();
     } catch (apiError) {
-      const detail = apiError?.response?.data;
-      setError(detail?.detail || detail?.password?.[0] || detail?.username?.[0] || "Failed to update user.");
+      setError(getApiErrorMessage(apiError, "Failed to update user."));
     } finally {
       setSaving(false);
     }
@@ -139,8 +138,7 @@ export default function AdminUsers() {
       setDeleteTarget(null);
       await loadUsers();
     } catch (apiError) {
-      const detail = apiError?.response?.data;
-      setError(detail?.detail || "Failed to delete user.");
+      setError(getApiErrorMessage(apiError, "Failed to delete user."));
     } finally {
       setSaving(false);
     }

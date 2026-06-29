@@ -175,3 +175,83 @@ class SupportWorkflowTests(APITestCase):
         response = self.client.get(f'/api/support/conversations/{conversation.id}/')
 
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    @patch('accounts.views.google_translate')
+    def test_chatbot_somali_query_translates_and_replies_somali(self, mock_translate):
+        mock_translate.side_effect = [
+            ("how much is ticket price", "so"),
+            ("Qiimaha tigidhadu waa $1.00 kursiga caadiga ah (Normal seat) iyo $3.00 kursiga VIP-da ah.", "so")
+        ]
+        self.client.force_authenticate(self.user)
+        response = self.client.post('/api/support/chatbot/', {'message': 'qiimaha tikidhada waa meeqo?'})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn('Qiimaha', response.data['answer'])
+        self.assertFalse(response.data['support_created'])
+
+    @patch('accounts.views.google_translate')
+    def test_chatbot_translation_failure_falls_back_to_hardcoded_somali(self, mock_translate):
+        mock_translate.return_value = (None, None)
+        self.client.force_authenticate(self.user)
+        response = self.client.post('/api/support/chatbot/', {'message': 'qiimaha'})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn('Qiimaha tigidhadu waa', response.data['answer'])
+        self.assertFalse(response.data['support_created'])
+
+    @patch('accounts.views.google_translate')
+    def test_chatbot_english_query_stays_english(self, mock_translate):
+        mock_translate.return_value = ("how much is ticket price", "en")
+        self.client.force_authenticate(self.user)
+        response = self.client.post('/api/support/chatbot/', {'message': 'how much is ticket price'})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn('Ticket prices are', response.data['answer'])
+        self.assertFalse(response.data['support_created'])
+
+    @patch('accounts.views.google_translate')
+    def test_chatbot_somali_buying_query_matches_how_to_buy(self, mock_translate):
+        mock_translate.side_effect = [
+            ("can i buy a ticket now?", "so"),
+            ("Fur Dhacdooyinka (Events), dooro dhacdo la ansixiyay, dooro Normal ama VIP, ka dibna dhammaystir bixinta lacagta. Ka dib marka lacag-bixintu guulaysato, tigidhkaaga QR wuxuu ka soo muuqan doonaa Passes.", "so")
+        ]
+        self.client.force_authenticate(self.user)
+        response = self.client.post('/api/support/chatbot/', {'message': 'hada ticket ma iibsan karaa'})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn('dhacdooyinka', response.data['answer'].lower())
+        self.assertFalse(response.data['support_created'])
+
+    @patch('accounts.views.google_translate')
+    def test_chatbot_somali_acknowledgement_matches_ack_flow(self, mock_translate):
+        mock_translate.side_effect = [
+            ("ok then i can buy yes is the answer ticket i can buy", "so"),
+            ("Aad u wanaagsan! Fadlan ii sheeg haddii aad u baahan tahay caawimaad kale.", "so")
+        ]
+        self.client.force_authenticate(self.user)
+        response = self.client.post('/api/support/chatbot/', {'message': 'ok markas waa iibsankara haa waye jawabta ticket waan iibsnkara'})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn('aad u wanaagsan', response.data['answer'].lower())
+        self.assertFalse(response.data['support_created'])
+
+    @patch('accounts.views.google_translate')
+    def test_chatbot_somali_yes_no_question_prefixes_correctly(self, mock_translate):
+        mock_translate.side_effect = [
+            ("can i scan ticket?", "so"),
+            ("Maya. Skaan-raynta tigidhadu waxay u xirantahay oo kaliya shaqaalaha la ogolaaday. Adiga oo ah macmiil, fur Passes oo tus code-kaaga QR shaqaalaha jooga albaabka.", "so")
+        ]
+        self.client.force_authenticate(self.user)
+        response = self.client.post('/api/support/chatbot/', {'message': 'ma skaan gareyn karaa ticket?'})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.data['answer'].startswith('Maya.'))
+        self.assertFalse(response.data['support_created'])
+
+    def test_chatbot_expired_ticket_query_returns_expired_rule(self):
+        self.client.force_authenticate(self.user)
+        response = self.client.post('/api/support/chatbot/', {'message': 'qrcode tciket hadii expired noqdo mageli event ?'})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn('Maya!', response.data['answer'])
+        self.assertIn('expired', response.data['answer'].lower())
+        self.assertNotIn('Here are the next available events', response.data['answer'])
+
+
+
+
+
+

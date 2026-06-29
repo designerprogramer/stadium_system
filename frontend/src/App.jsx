@@ -34,6 +34,7 @@ const AdminLayout = lazy(() => import("./pages/admin_dashboard/Layout"));
 const AdminDashboard = lazy(() => import("./pages/admin_dashboard/dashboard"));
 const AdminEvents = lazy(() => import("./pages/admin_dashboard/events"));
 const AdminFinance = lazy(() => import("./pages/admin_dashboard/finance"));
+const AdminReport = lazy(() => import("./pages/admin_dashboard/report"));
 const AdminEventHistory = lazy(() => import("./pages/admin_dashboard/event_history"));
 const AdminManualTickets = lazy(() => import("./pages/admin_dashboard/manual_tickets"));
 const AdminStaffManagement = lazy(() => import("./pages/admin_dashboard/staff_management"));
@@ -43,6 +44,7 @@ const AdminSettings = lazy(() => import("./pages/admin_dashboard/settings"));
 const AdminSupport = lazy(() => import("./pages/admin_dashboard/support"));
 const ExternalBookings = lazy(() => import("./pages/shared/external_bookings"));
 const ScheduleCalendar = lazy(() => import("./pages/shared/schedule_calendar"));
+const TeamChat = lazy(() => import("./pages/shared/team_chat"));
 const NotFound = lazy(() => import("./pages/not_found"));
 
 function App() {
@@ -88,6 +90,7 @@ function App() {
           <Route path="external-bookings" element={<ExternalBookings role="Staff" />} />
           <Route path="non-buy-tickets" element={<NonBuyTicket />} />
           <Route path="support" element={<StaffSupport />} />
+          <Route path="team-chat" element={<TeamChat />} />
           <Route path="notifications" element={<StaffNotification />} />
           <Route path="settings" element={<StaffSettings />} />
         </Route>
@@ -98,6 +101,7 @@ function App() {
           <Route index element={<Navigate to="dashboard" replace />} />
           <Route path="dashboard" element={<AdminDashboard />} />
           <Route path="finance" element={<AdminFinance />} />
+          <Route path="report" element={<AdminReport />} />
           <Route path="events" element={<AdminEvents />} />
           <Route path="schedule" element={<ScheduleCalendar role="Admin" />} />
           <Route path="external-bookings" element={<ExternalBookings role="Admin" />} />
@@ -106,6 +110,7 @@ function App() {
           <Route path="staff-management" element={<AdminStaffManagement />} />
           <Route path="users" element={<AdminUsers />} />
           <Route path="support" element={<AdminSupport />} />
+          <Route path="team-chat" element={<TeamChat />} />
           <Route path="notifications" element={<AdminNotification />} />
           <Route path="settings" element={<AdminSettings />} />
         </Route>

@@ -119,6 +119,10 @@ def _notify_admins(title, message, notification_type='info'):
 
 
 STADIUM_SLOT_HOURS = 3
+SEAT_CAPACITY = {
+    'Normal': {'sections': 1, 'seats_per_section': 600},
+    'VIP': {'sections': 1, 'seats_per_section': 100},
+}
 
 
 def _clash_window(scheduled_at):
@@ -340,6 +344,15 @@ class ManualTicketRequestViewSet(viewsets.ModelViewSet):
         if _user_has_paid_ticket(serializer.validated_data['target_user'], serializer.validated_data['event']):
             raise ValidationError('This user already has a ticket for this event.')
 
+        if Ticket.objects.filter(
+            event=serializer.validated_data['event'],
+            seat_type=serializer.validated_data['seat_type'],
+            section=serializer.validated_data['section'],
+            seat_number=serializer.validated_data['seat_number'],
+            is_paid=True,
+        ).exists():
+            raise ValidationError('This seat is already booked.')
+
         duplicate_pending = ManualTicketRequest.objects.filter(
             requester=self.request.user,
             target_user=serializer.validated_data['target_user'],
@@ -432,6 +445,8 @@ class ManualTicketRequestViewSet(viewsets.ModelViewSet):
                     user=manual_request.target_user,
                     event=manual_request.event,
                     seat_type=manual_request.seat_type,
+                    section=manual_request.section,
+                    seat_number=manual_request.seat_number,
                     price=seat_price,
                     is_paid=True,
                     payment_status='paid',
@@ -489,8 +504,36 @@ def _event_price_for_seat(seat_type):
     return Decimal('3.00') if seat_type == 'VIP' else Decimal('1.00')
 
 
+def _seat_capacity_for(seat_type):
+    return SEAT_CAPACITY.get(seat_type)
+
+
+def _validate_seat_choice(seat_type, section, seat_number):
+    capacity = _seat_capacity_for(seat_type)
+    if not capacity:
+        raise ValidationError('Invalid seat type. Must be VIP or Normal')
+    if not (1 <= section <= capacity['sections']):
+        raise ValidationError(f'{seat_type} has one section only.')
+    if not (1 <= seat_number <= capacity['seats_per_section']):
+        raise ValidationError(f'{seat_type} seat number must be between 1 and {capacity["seats_per_section"]}.')
+
+
 def _user_has_paid_ticket(user, event, exclude_ticket_id=None):
     tickets = Ticket.objects.filter(user=user, event=event, is_paid=True)
+    if exclude_ticket_id:
+        tickets = tickets.exclude(id=exclude_ticket_id)
+    return tickets.exists()
+
+
+def _user_has_paid_seat(user, event, seat_type, section, seat_number, exclude_ticket_id=None):
+    tickets = Ticket.objects.filter(
+        user=user,
+        event=event,
+        seat_type=seat_type,
+        section=section,
+        seat_number=seat_number,
+        is_paid=True
+    )
     if exclude_ticket_id:
         tickets = tickets.exclude(id=exclude_ticket_id)
     return tickets.exists()
@@ -515,7 +558,7 @@ def _finalize_succeeded_ticket(ticket, payment_intent_id):
     if ticket.is_paid and ticket.payment_status == 'paid':
         return 'paid'
 
-    if _user_has_paid_ticket(ticket.user, ticket.event, exclude_ticket_id=ticket.id):
+    if _user_has_paid_seat(ticket.user, ticket.event, ticket.seat_type, ticket.section, ticket.seat_number, exclude_ticket_id=ticket.id):
         refund = stripe.Refund.create(payment_intent=payment_intent_id, reason='duplicate')
         ticket.payment_status = 'refunded'
         ticket.stripe_refund_id = refund.id
@@ -554,6 +597,8 @@ def create_payment_intent(request):
 
     event_id = request.data.get('event_id')
     seat_type = request.data.get('seat_type')
+    section = request.data.get('section')
+    seat_number = request.data.get('seat_number')
 
     if not event_id or not seat_type:
         return Response({'error': 'event_id and seat_type are required'}, status=status.HTTP_400_BAD_REQUEST)
@@ -569,34 +614,100 @@ def create_payment_intent(request):
     if event.date <= timezone.now():
         return Response({'error': 'This event has expired. Ticket sales are closed.'}, status=status.HTTP_400_BAD_REQUEST)
 
-    if _user_has_paid_ticket(request.user, event):
-        return Response({'error': 'You already bought a ticket for this event.'}, status=status.HTTP_400_BAD_REQUEST)
+    now = timezone.now()
 
-    if seat_type not in ['VIP', 'Normal']:
-        return Response({'error': 'Invalid seat type. Must be VIP or Normal'}, status=status.HTTP_400_BAD_REQUEST)
+    if section is None or seat_number is None:
+        occupied = Ticket.objects.filter(
+            event=event,
+            seat_type=seat_type,
+        ).filter(
+            Q(is_paid=True) | (Q(payment_status='pending') & Q(payment_expires_at__gt=now))
+        ).values_list('section', 'seat_number')
+        
+        occupied_set = {(row[0], row[1]) for row in occupied if row[0] is not None and row[1] is not None}
+        
+        found = False
+        capacity = _seat_capacity_for(seat_type)
+        if not capacity:
+            return Response({'error': 'Invalid seat type. Must be VIP or Normal'}, status=status.HTTP_400_BAD_REQUEST)
+        max_sec = capacity['sections']
+        max_seat = capacity['seats_per_section']
+        
+        for sec in range(1, max_sec + 1):
+            user_sec_count = Ticket.objects.filter(
+                user=request.user,
+                event=event,
+                seat_type=seat_type,
+                section=sec,
+            ).filter(
+                Q(is_paid=True) | (Q(payment_status='pending') & Q(payment_expires_at__gt=now))
+            ).count()
+            
+            if user_sec_count >= 2:
+                continue
+                
+            for s_num in range(1, max_seat + 1):
+                if (sec, s_num) not in occupied_set:
+                    section = sec
+                    seat_number = s_num
+                    found = True
+                    break
+            if found:
+                break
+                
+        if not found:
+            return Response({'error': 'No available seats for this seat type.'}, status=status.HTTP_400_BAD_REQUEST)
+    else:
+        try:
+            section = int(section)
+            seat_number = int(seat_number)
+        except (ValueError, TypeError):
+            return Response({'error': 'section and seat_number must be integers'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            _validate_seat_choice(seat_type, section, seat_number)
+        except ValidationError as exc:
+            return Response({'error': str(exc.detail[0] if isinstance(exc.detail, list) else exc.detail)}, status=status.HTTP_400_BAD_REQUEST)
 
     price = _event_price_for_seat(seat_type)
-    now = timezone.now()
 
     with transaction.atomic():
         User.objects.select_for_update().get(pk=request.user.pk)
-        pending_tickets = list(
-            Ticket.objects.select_for_update()
-            .filter(user=request.user, event=event, payment_status='pending', is_paid=False)
-            .order_by('-created_at')
-        )
+        
+        # Legacy/test compatibility: if section/seat were not provided in request, try to find any pending ticket
+        if request.data.get('section') is None or request.data.get('seat_number') is None:
+            legacy_pending = Ticket.objects.select_for_update().filter(
+                user=request.user,
+                event=event,
+                seat_type=seat_type,
+                payment_status='pending',
+                is_paid=False
+            ).order_by('-created_at').first()
+            if legacy_pending:
+                section = legacy_pending.section
+                seat_number = legacy_pending.seat_number
 
-        for pending in pending_tickets:
-            if pending.seat_type == seat_type and pending.payment_expires_at and pending.payment_expires_at > now:
+        pending_seat_ticket = Ticket.objects.select_for_update().filter(
+            user=request.user,
+            event=event,
+            seat_type=seat_type,
+            section=section,
+            seat_number=seat_number,
+            payment_status='pending',
+            is_paid=False
+        ).order_by('-created_at').first()
+
+        if pending_seat_ticket:
+            if pending_seat_ticket.payment_expires_at and pending_seat_ticket.payment_expires_at > now:
                 try:
-                    intent = stripe.PaymentIntent.retrieve(pending.stripe_payment_intent_id)
+                    intent = stripe.PaymentIntent.retrieve(pending_seat_ticket.stripe_payment_intent_id)
                     if intent.status == 'succeeded':
-                        result = _finalize_succeeded_ticket(pending, intent.id)
+                        result = _finalize_succeeded_ticket(pending_seat_ticket, intent.id)
                         if result == 'paid':
                             return Response({
                                 'alreadyPaid': True,
-                                'ticket_id': pending.id,
-                                'ticket': TicketSerializer(pending).data,
+                                'ticket_id': pending_seat_ticket.id,
+                                'ticket': TicketSerializer(pending_seat_ticket).data,
                             })
                         return Response(
                             {'error': 'A duplicate successful payment was refunded.'},
@@ -606,18 +717,54 @@ def create_payment_intent(request):
                         return Response(
                             {
                                 'clientSecret': intent.client_secret,
-                                'ticket_id': pending.id,
+                                'ticket_id': pending_seat_ticket.id,
                                 'reused': True,
                             }
                         )
                 except Exception:
                     pass
-            _cancel_pending_ticket(pending)
+            _cancel_pending_ticket(pending_seat_ticket)
+
+        expired_tickets = Ticket.objects.filter(
+            user=request.user,
+            event=event,
+            payment_status='pending',
+            is_paid=False,
+            payment_expires_at__lte=now
+        )
+        for expired in expired_tickets:
+            _cancel_pending_ticket(expired)
+
+        seat_taken = Ticket.objects.filter(
+            event=event,
+            seat_type=seat_type,
+            section=section,
+            seat_number=seat_number,
+        ).filter(
+            Q(is_paid=True) | (Q(payment_status='pending') & Q(payment_expires_at__gt=now))
+        ).exists()
+        
+        if seat_taken:
+            return Response({'error': 'This seat is already booked.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        user_section_count = Ticket.objects.filter(
+            user=request.user,
+            event=event,
+            seat_type=seat_type,
+            section=section,
+        ).filter(
+            Q(is_paid=True) | (Q(payment_status='pending') & Q(payment_expires_at__gt=now))
+        ).count()
+
+        if user_section_count >= 2:
+            return Response({'error': 'You cannot buy more than 2 seats in the same section.'}, status=status.HTTP_400_BAD_REQUEST)
 
         ticket = Ticket.objects.create(
             user=request.user,
             event=event,
             seat_type=seat_type,
+            section=section,
+            seat_number=seat_number,
             price=price,
             payment_status='pending',
             payment_expires_at=now + PAYMENT_INTENT_TTL,
@@ -627,7 +774,14 @@ def create_payment_intent(request):
             intent = stripe.PaymentIntent.create(
                 amount=int(price * 100),
                 currency='usd',
-                metadata={'event_id': event_id, 'user_id': request.user.id, 'seat_type': seat_type, 'ticket_id': ticket.id},
+                metadata={
+                    'event_id': event_id,
+                    'user_id': request.user.id,
+                    'seat_type': seat_type,
+                    'section': section,
+                    'seat_number': seat_number,
+                    'ticket_id': ticket.id
+                },
                 idempotency_key=f'stadium-ticket-{ticket.id}',
             )
             ticket.stripe_payment_intent_id = intent.id
@@ -638,6 +792,7 @@ def create_payment_intent(request):
             ticket.payment_expires_at = None
             ticket.save(update_fields=['payment_status', 'payment_expires_at'])
             return Response({'error': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
 
 
 @api_view(['POST'])
@@ -952,15 +1107,28 @@ def staff_dashboard_stats(request):
     current_start = now - timedelta(days=7)
     previous_start = current_start - timedelta(days=7)
     paid_tickets = Ticket.objects.filter(is_paid=True)
+    external_bookings = ExternalStadiumBooking.objects.all()
+
     total_tickets = paid_tickets.count()
-    total_revenue = paid_tickets.aggregate(Sum('price'))['price__sum'] or Decimal('0.00')
+    ticket_revenue = paid_tickets.aggregate(Sum('price'))['price__sum'] or Decimal('0.00')
+    external_revenue = external_bookings.aggregate(Sum('amount_paid'))['amount_paid__sum'] or Decimal('0.00')
+    total_revenue = ticket_revenue + external_revenue
     upcoming_events = Event.objects.filter(date__gte=now, status='approved').count()
 
     recent_tickets = paid_tickets.select_related('user', 'event').order_by('-created_at')[:5]
     current_tickets = paid_tickets.filter(created_at__gte=current_start)
     previous_tickets = paid_tickets.filter(created_at__gte=previous_start, created_at__lt=current_start)
-    current_revenue = current_tickets.aggregate(total=Sum('price'))['total'] or Decimal('0.00')
-    previous_revenue = previous_tickets.aggregate(total=Sum('price'))['total'] or Decimal('0.00')
+
+    current_externals = external_bookings.filter(created_at__gte=current_start)
+    previous_externals = external_bookings.filter(created_at__gte=previous_start, created_at__lt=current_start)
+
+    current_ticket_rev = current_tickets.aggregate(total=Sum('price'))['total'] or Decimal('0.00')
+    current_external_rev = current_externals.aggregate(total=Sum('amount_paid'))['total'] or Decimal('0.00')
+    current_revenue = current_ticket_rev + current_external_rev
+
+    previous_ticket_rev = previous_tickets.aggregate(total=Sum('price'))['total'] or Decimal('0.00')
+    previous_external_rev = previous_externals.aggregate(total=Sum('amount_paid'))['total'] or Decimal('0.00')
+    previous_revenue = previous_ticket_rev + previous_external_rev
 
     current_events = Event.objects.filter(status='approved', date__gte=now, date__lt=now + timedelta(days=7)).count()
     previous_events = Event.objects.filter(status='approved', date__gte=now - timedelta(days=7), date__lt=now).count()
@@ -974,15 +1142,31 @@ def staff_dashboard_stats(request):
         .values('day')
         .annotate(tickets=Count('id'), revenue=Sum('price'))
     )
+    external_daily = (
+        current_externals.annotate(day=TruncDate('created_at'))
+        .values('day')
+        .annotate(revenue=Sum('amount_paid'), count=Count('id'))
+    )
+
     daily_map = {row['day']: row for row in daily_rows}
+    external_daily_map = {row['day']: row for row in external_daily}
+
     daily_activity = []
     for offset in range(7):
         day = (current_start + timedelta(days=offset)).date()
         row = daily_map.get(day)
+        ext_row = external_daily_map.get(day)
+
+        t_tickets = row['tickets'] if row else 0
+        t_revenue = row['revenue'] if row else Decimal('0.00')
+
+        e_count = ext_row['count'] if ext_row else 0
+        e_revenue = ext_row['revenue'] if ext_row else Decimal('0.00')
+
         daily_activity.append({
             'date': day.isoformat(),
-            'tickets': row['tickets'] if row else 0,
-            'revenue': _to_float(row['revenue']) if row else 0,
+            'tickets': t_tickets + e_count,
+            'revenue': _to_float(t_revenue + e_revenue),
         })
 
     month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
@@ -994,13 +1178,42 @@ def staff_dashboard_stats(request):
         .annotate(revenue=Sum('price'), tickets=Count('id'))
         .order_by('month')
     )
-    monthly_revenue = [
-        {
-            'month': row['month'].strftime('%Y-%m'),
-            'revenue': _to_float(row['revenue']),
+    external_monthly = (
+        external_bookings.filter(created_at__gte=monthly_start)
+        .annotate(month=TruncMonth('created_at'))
+        .values('month')
+        .annotate(revenue=Sum('amount_paid'), count=Count('id'))
+        .order_by('month')
+    )
+
+    monthly_map = {}
+    for row in monthly_rows:
+        month_str = row['month'].strftime('%Y-%m')
+        monthly_map[month_str] = {
+            'month': month_str,
+            'revenue': row['revenue'],
             'tickets': row['tickets'],
         }
-        for row in monthly_rows
+    for row in external_monthly:
+        month_str = row['month'].strftime('%Y-%m')
+        if month_str in monthly_map:
+            monthly_map[month_str]['revenue'] += row['revenue']
+            monthly_map[month_str]['tickets'] += row['count']
+        else:
+            monthly_map[month_str] = {
+                'month': month_str,
+                'revenue': row['revenue'],
+                'tickets': row['count'],
+            }
+
+    sorted_months = sorted(monthly_map.keys())
+    monthly_revenue = [
+        {
+            'month': m,
+            'revenue': _to_float(monthly_map[m]['revenue']),
+            'tickets': monthly_map[m]['tickets'],
+        }
+        for m in sorted_months
     ]
 
     recent_data = [
@@ -1046,32 +1259,62 @@ def admin_dashboard_stats(request):
 
     now = timezone.now()
     paid_tickets = Ticket.objects.filter(is_paid=True)
-    total_revenue = paid_tickets.aggregate(Sum('price'))['price__sum'] or Decimal('0.00')
+    external_bookings = ExternalStadiumBooking.objects.all()
+
+    ticket_revenue = paid_tickets.aggregate(Sum('price'))['price__sum'] or Decimal('0.00')
+    external_revenue = external_bookings.aggregate(Sum('amount_paid'))['amount_paid__sum'] or Decimal('0.00')
+    total_revenue = ticket_revenue + external_revenue
+
     current_start = now - timedelta(days=7)
     previous_start = current_start - timedelta(days=7)
+
     current_tickets = paid_tickets.filter(created_at__gte=current_start)
     previous_tickets = paid_tickets.filter(created_at__gte=previous_start, created_at__lt=current_start)
-    current_revenue = current_tickets.aggregate(total=Sum('price'))['total'] or Decimal('0.00')
-    previous_revenue = previous_tickets.aggregate(total=Sum('price'))['total'] or Decimal('0.00')
+
+    current_externals = external_bookings.filter(created_at__gte=current_start)
+    previous_externals = external_bookings.filter(created_at__gte=previous_start, created_at__lt=current_start)
+
+    current_ticket_rev = current_tickets.aggregate(total=Sum('price'))['total'] or Decimal('0.00')
+    current_external_rev = current_externals.aggregate(total=Sum('amount_paid'))['total'] or Decimal('0.00')
+    current_revenue = current_ticket_rev + current_external_rev
+
+    previous_ticket_rev = previous_tickets.aggregate(total=Sum('price'))['total'] or Decimal('0.00')
+    previous_external_rev = previous_externals.aggregate(total=Sum('amount_paid'))['total'] or Decimal('0.00')
+    previous_revenue = previous_ticket_rev + previous_external_rev
 
     last_7_days_start = now - timedelta(days=6)
-    revenue_points = (
+    ticket_points = (
         paid_tickets.filter(created_at__date__gte=last_7_days_start.date())
         .annotate(day=TruncDate('created_at'))
         .values('day')
-        .annotate(total=Sum('price'), tickets=Count('id'))
+        .annotate(total=Sum('price'), count=Count('id'))
+        .order_by('day')
+    )
+    external_points = (
+        external_bookings.filter(created_at__date__gte=last_7_days_start.date())
+        .annotate(day=TruncDate('created_at'))
+        .values('day')
+        .annotate(total=Sum('amount_paid'), count=Count('id'))
         .order_by('day')
     )
 
-    revenue_map = {point['day']: point for point in revenue_points}
+    ticket_map = {point['day']: point for point in ticket_points}
+    external_map = {point['day']: point for point in external_points}
     sparkline = []
     for offset in range(7):
         current_day = (last_7_days_start + timedelta(days=offset)).date()
-        point = revenue_map.get(current_day)
+        t_point = ticket_map.get(current_day)
+        e_point = external_map.get(current_day)
+
+        t_rev = t_point['total'] if t_point else Decimal('0.00')
+        e_rev = e_point['total'] if e_point else Decimal('0.00')
+        t_count = t_point['count'] if t_point else 0
+        e_count = e_point['count'] if e_point else 0
+
         sparkline.append({
             'day': current_day.isoformat(),
-            'revenue': _to_float(point['total']) if point else 0,
-            'tickets': point['tickets'] if point else 0,
+            'revenue': _to_float(t_rev + e_rev),
+            'tickets': t_count + e_count,
         })
 
     current_customers = User.objects.filter(role='user', date_joined__gte=current_start).count()
@@ -1115,30 +1358,47 @@ def admin_financial_stats(request):
         raise PermissionDenied('Only admins can access this endpoint.')
 
     paid_tickets = Ticket.objects.filter(is_paid=True)
+    external_bookings = ExternalStadiumBooking.objects.all()
 
-    total_revenue = paid_tickets.aggregate(Sum('price'))['price__sum'] or Decimal('0.00')
+    ticket_revenue = paid_tickets.aggregate(Sum('price'))['price__sum'] or Decimal('0.00')
+    external_revenue = external_bookings.aggregate(Sum('amount_paid'))['amount_paid__sum'] or Decimal('0.00')
+    total_revenue = ticket_revenue + external_revenue
     total_tickets = paid_tickets.count()
-    avg_ticket_price = (total_revenue / total_tickets) if total_tickets else Decimal('0.00')
+    avg_ticket_price = (ticket_revenue / total_tickets) if total_tickets else Decimal('0.00')
 
     daily_start = timezone.now() - timedelta(days=13)
-    daily_rows = (
+    ticket_daily = (
         paid_tickets.filter(created_at__date__gte=daily_start.date())
         .annotate(day=TruncDate('created_at'))
         .values('day')
         .annotate(revenue=Sum('price'), tickets=Count('id'))
-        .order_by('day')
+    )
+    external_daily = (
+        external_bookings.filter(created_at__date__gte=daily_start.date())
+        .annotate(day=TruncDate('created_at'))
+        .values('day')
+        .annotate(revenue=Sum('amount_paid'), count=Count('id'))
     )
 
-    daily_map = {row['day']: row for row in daily_rows}
+    ticket_daily_map = {row['day']: row for row in ticket_daily}
+    external_daily_map = {row['day']: row for row in external_daily}
+
     revenue_by_day = []
     for offset in range(14):
         current_day = (daily_start + timedelta(days=offset)).date()
-        row = daily_map.get(current_day)
+        t_row = ticket_daily_map.get(current_day)
+        e_row = external_daily_map.get(current_day)
+
+        t_rev = t_row['revenue'] if t_row else Decimal('0.00')
+        e_rev = e_row['revenue'] if e_row else Decimal('0.00')
+        t_count = t_row['tickets'] if t_row else 0
+        e_count = e_row['count'] if e_row else 0
+
         revenue_by_day.append(
             {
                 'date': current_day.isoformat(),
-                'revenue': _to_float(row['revenue']) if row else 0,
-                'tickets': row['tickets'] if row else 0,
+                'revenue': _to_float(t_rev + e_rev),
+                'tickets': t_count + e_count,
             }
         )
 
@@ -1151,22 +1411,52 @@ def admin_financial_stats(request):
         }
         for row in seat_rows
     ]
+    if external_revenue > 0:
+        revenue_by_seat.append({
+            'seat_type': 'Stadium Booking',
+            'revenue': _to_float(external_revenue),
+            'tickets': external_bookings.count(),
+        })
 
-    monthly_rows = (
+    ticket_monthly = (
         paid_tickets.annotate(month=TruncMonth('created_at'))
         .values('month')
         .annotate(revenue=Sum('price'), tickets=Count('id'))
-        .order_by('-month')[:6]
     )
-    monthly_rows = list(reversed(monthly_rows))
+    external_monthly = (
+        external_bookings.annotate(month=TruncMonth('created_at'))
+        .values('month')
+        .annotate(revenue=Sum('amount_paid'), count=Count('id'))
+    )
 
-    monthly_revenue = [
-        {
-            'month': row['month'].strftime('%Y-%m'),
-            'revenue': _to_float(row['revenue']),
+    monthly_map = {}
+    for row in ticket_monthly:
+        month_str = row['month'].strftime('%Y-%m')
+        monthly_map[month_str] = {
+            'month': month_str,
+            'revenue': row['revenue'],
             'tickets': row['tickets'],
         }
-        for row in monthly_rows
+    for row in external_monthly:
+        month_str = row['month'].strftime('%Y-%m')
+        if month_str in monthly_map:
+            monthly_map[month_str]['revenue'] += row['revenue']
+            monthly_map[month_str]['tickets'] += row['count']
+        else:
+            monthly_map[month_str] = {
+                'month': month_str,
+                'revenue': row['revenue'],
+                'tickets': row['count'],
+            }
+
+    sorted_months = sorted(monthly_map.keys())[-6:]
+    monthly_revenue = [
+        {
+            'month': m,
+            'revenue': _to_float(monthly_map[m]['revenue']),
+            'tickets': monthly_map[m]['tickets'],
+        }
+        for m in sorted_months
     ]
 
     top_events_rows = (
@@ -1197,6 +1487,7 @@ def admin_financial_stats(request):
     )
 
 
+
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])
 def admin_report_stats(request):
@@ -1208,8 +1499,11 @@ def admin_report_stats(request):
 
     tickets_this_month = Ticket.objects.filter(is_paid=True, created_at__gte=month_start)
     tickets_used_this_month = Ticket.objects.filter(is_paid=True, is_used=True, used_at__gte=month_start)
+    externals_this_month = ExternalStadiumBooking.objects.filter(created_at__gte=month_start)
 
-    revenue_this_month = tickets_this_month.aggregate(Sum('price'))['price__sum'] or Decimal('0.00')
+    ticket_rev_this_month = tickets_this_month.aggregate(Sum('price'))['price__sum'] or Decimal('0.00')
+    external_rev_this_month = externals_this_month.aggregate(Sum('amount_paid'))['amount_paid__sum'] or Decimal('0.00')
+    revenue_this_month = ticket_rev_this_month + external_rev_this_month
 
     event_performance_rows = (
         Ticket.objects.filter(is_paid=True)
@@ -1262,12 +1556,27 @@ def admin_report_stats(request):
         {
             'summary': {
                 'tickets_this_month': tickets_this_month.count(),
+                'external_bookings_this_month': externals_this_month.count(),
                 'revenue_this_month': _to_float(revenue_this_month),
+                'ticket_revenue_this_month': _to_float(ticket_rev_this_month),
+                'external_revenue_this_month': _to_float(external_rev_this_month),
                 'checkins_this_month': tickets_used_this_month.count(),
                 'pending_events': Event.objects.filter(status='pending').count(),
                 'pending_manual_requests': ManualTicketRequest.objects.filter(status='pending').count(),
             },
             'event_performance': event_performance,
+            'external_bookings': [
+                {
+                    'id': item.id,
+                    'organizer_name': item.organizer_name,
+                    'title': f'{item.team1_name} vs {item.team2_name}',
+                    'scheduled_at': item.scheduled_at,
+                    'amount_paid': _to_float(item.amount_paid),
+                    'payment_reference': item.payment_reference,
+                    'created_by': item.created_by.username,
+                }
+                for item in externals_this_month.select_related('created_by').order_by('-created_at')[:8]
+            ],
             'manual_requests': manual_rows,
         }
     )
@@ -1459,5 +1768,50 @@ def event_history_report(request):
         totals['unused_tickets'] += unused_tickets
         totals['revenue'] += revenue
 
+    # Include external stadium bookings
+    external_bookings = ExternalStadiumBooking.objects.select_related('created_by').all()
+    for booking in external_bookings:
+        records.append(
+            {
+                'event_id': f"booking-{booking.id}",
+                'title': f"{booking.team1_name} vs {booking.team2_name} (Stadium Booking)",
+                'date': booking.scheduled_at,
+                'status': 'booked',
+                'attendance_count': 0,
+                'tickets_sold': 0,
+                'used_tickets': 0,
+                'unused_tickets': 0,
+                'revenue': _to_float(booking.amount_paid),
+                'created_by': booking.created_by.username,
+            }
+        )
+        totals['events'] += 1
+        totals['revenue'] += booking.amount_paid
+
+    # Sort records descending by date
+    records.sort(key=lambda r: r['date'], reverse=True)
+
     totals['revenue'] = _to_float(totals['revenue'])
     return Response({'summary': totals, 'records': records})
+
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def event_booked_seats(request, event_id):
+    now = timezone.now()
+    booked_tickets = Ticket.objects.filter(
+        event_id=event_id
+    ).filter(
+        Q(is_paid=True) | (Q(payment_status='pending') & Q(payment_expires_at__gt=now))
+    )
+    
+    booked_list = [
+        {
+            'seat_type': ticket.seat_type,
+            'section': ticket.section,
+            'seat_number': ticket.seat_number,
+            'user_id': ticket.user_id,
+        }
+        for ticket in booked_tickets if ticket.section is not None and ticket.seat_number is not None
+    ]
+    return Response(booked_list)

@@ -27,16 +27,16 @@ function statusStyle(status) {
 
 function senderLabel(message) {
   if (message?.sender_role === "bot") {
-    return "Stadium Bot";
+    return "Bot-ka Garoonka";
   }
   if (!message?.sender) {
-    return "Support";
+    return "Taageerada";
   }
   if (message.sender_role === "user") {
-    return "You";
+    return "Adiga";
   }
   if (message.sender_role === "staff") {
-    return `Staff - ${message.sender.username}`;
+    return `Shaqaale - ${message.sender.username}`;
   }
   if (message.sender_role === "admin") {
     return `Admin - ${message.sender.username}`;
@@ -66,7 +66,18 @@ export default function ChatWidget() {
 
     try {
       const response = await API.get("/support/my-conversation/");
-      setConversation(response.data?.conversation || null);
+      const conv = response.data?.conversation || null;
+      setConversation((prev) => {
+        if (prev && !conv) {
+          setAutomatedMessages([]);
+          localStorage.removeItem(botStorageKey);
+        }
+        return conv;
+      });
+      if (showLoader && !conv) {
+        setAutomatedMessages([]);
+        localStorage.removeItem(botStorageKey);
+      }
       setError("");
     } catch (apiError) {
       console.error(apiError);
@@ -76,7 +87,7 @@ export default function ChatWidget() {
         setLoading(false);
       }
     }
-  }, []);
+  }, [botStorageKey]);
 
   useEffect(() => {
     const initialLoadTimer = setTimeout(() => {
@@ -172,9 +183,9 @@ export default function ChatWidget() {
   return (
     <div className="mx-auto w-full max-w-5xl space-y-5 pb-10">
       <DashboardPageHeader
-        eyebrow="Automated Chatbot"
-        title="Ask the stadium assistant"
-        description="The bot checks live stadium information first and automatically creates a staff case when human help is needed."
+        eyebrow="Caawiyaha Tooska ah (Chatbot)"
+        title="Weydii caawiyaha garoonka"
+        description="Bot-ku wuxuu marka hore hubiyaa macluumaadka tooska ah ee garoonka wuxuuna si toos ah u furayaa kiis caawinaad haddii loo baahdo shaqaale."
         icon={Bot}
       />
 
@@ -188,20 +199,20 @@ export default function ChatWidget() {
         {loading ? (
           <div className="flex items-center justify-center py-20 text-slate-500">
             <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-            Loading conversation...
+            Soo raraya wada sheekaysiga...
           </div>
         ) : (
           <>
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-4">
               <div className="space-y-1">
                 <p className="text-sm font-semibold text-slate-800">
-                  Action Taker:{" "}
+                  Qofka Gacanta ku Haya:{" "}
                   <span className="text-blue-700">
                     {conversation?.assigned_to
                       ? `${conversation.assigned_to.role.toUpperCase()} - ${conversation.assigned_to.username}`
                       : conversation?.assigned_role
                         ? conversation.assigned_role.toUpperCase()
-                        : "BOT FIRST, STAFF IF ESCALATED"}
+                        : "BOT MARKA HORE, SHAQAALE HADDII LOO GUDBIYO"}
                   </span>
                 </p>
                 {conversation?.status && (
@@ -219,7 +230,7 @@ export default function ChatWidget() {
                   className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-70"
                 >
                   {closing ? <Loader2 className="h-4 w-4 animate-spin" /> : <XCircle className="h-4 w-4" />}
-                  Close chat
+                  Xir sheekada
                 </button>
               )}
             </div>
@@ -227,7 +238,7 @@ export default function ChatWidget() {
             <div className="h-[380px] overflow-y-auto rounded-xl border border-slate-200 bg-slate-50 p-3 sm:p-4">
               {[...(conversation?.messages || []), ...automatedMessages].length === 0 ? (
                 <div className="flex h-full items-center justify-center text-sm text-slate-500">
-                  Ask about available events, prices, buying tickets, payments, refunds, gates, or ticket scanning.
+                  Weydii wax ku saabsan dhacdooyinka la heli karo, qiimaha, iibsashada tikidhada, lacag-bixinta, lacag-celinta, albaabbada, ama skaan-raynta tikidhada.
                 </div>
               ) : (
                 <div className="space-y-3">
@@ -264,7 +275,7 @@ export default function ChatWidget() {
                 value={message}
                 onChange={(event) => setMessage(event.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder="Ask a question. Unresolved issues automatically go to staff..."
+                placeholder="Weydii su'aal. Arrimaha aan la xallin si toos ah ayaa loogu gudbinayaa shaqaalaha..."
                 className="min-h-[62px] w-full resize-none rounded-xl border border-slate-300 px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
               />
               <button
