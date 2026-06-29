@@ -21,8 +21,8 @@ Set these secret/environment values in the Render service:
 - `DEFAULT_FROM_EMAIL=your-email@example.com`
 
 Render supplies `DATABASE_URL`, and the blueprint generates
-`DJANGO_SECRET_KEY`. Netlify proxies `/api/*` to the Render backend, so set
-Netlify's `VITE_API_BASE_URL=/api` and redeploy Netlify.
+`DJANGO_SECRET_KEY`. Netlify proxies API requests through a serverless function,
+so leave `VITE_API_BASE_URL` unset or set it to `/.netlify/functions/api`.
 
 1. Install dependencies:
    `pip install -r backend/requirements.txt`
@@ -51,7 +51,7 @@ Subscribe it to `payment_intent.succeeded` and set its signing secret as
 ## Frontend
 
 1. Set `VITE_STRIPE_PUBLISHABLE_KEY`.
-2. Set `VITE_API_BASE_URL=/api` on Netlify so browser requests go through the Netlify proxy.
+2. Leave `VITE_API_BASE_URL` unset on Netlify, or set it to `/.netlify/functions/api`.
 3. Run `npm ci` and `npm run build` in `frontend`.
 4. Serve `frontend/dist` through HTTPS.
 5. Configure the host to rewrite unknown frontend routes to `index.html`.
@@ -64,7 +64,7 @@ publishes `frontend/dist`.
 
 Set these variables in Netlify under **Project configuration > Environment variables**:
 
-- `VITE_API_BASE_URL=/api`
+- `VITE_API_BASE_URL=/.netlify/functions/api` (optional; the frontend defaults to this in production)
 - `VITE_STRIPE_PUBLISHABLE_KEY=pk_test_...` (or the live publishable key)
 
 Do not add `STRIPE_SECRET_KEY` to Netlify. It belongs only in the backend
