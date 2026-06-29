@@ -43,6 +43,11 @@ class EmailDeliveryUnavailable(APIException):
 
 
 def send_otp_email(email, code, subject):
+    if settings.EMAIL_HOST.lower() == 'smtp.gmail.com' and (
+        not settings.EMAIL_HOST_USER or not settings.EMAIL_HOST_PASSWORD
+    ):
+        raise RuntimeError('SMTP email credentials are not configured.')
+
     message = f"Your stadium system OTP is {code}. It is valid for 15 minutes."
     send_mail(
         subject,

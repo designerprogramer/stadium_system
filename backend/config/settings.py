@@ -188,6 +188,7 @@ if EMAIL_HOST.lower() == 'smtp.gmail.com':
     EMAIL_HOST_PASSWORD = EMAIL_HOST_PASSWORD.replace(' ', '')
 EMAIL_USE_TLS = os.environ.get('EMAIL_USE_TLS', 'True') == 'True'
 EMAIL_USE_SSL = os.environ.get('EMAIL_USE_SSL', 'False') == 'True'
+EMAIL_TIMEOUT = int(os.environ.get('EMAIL_TIMEOUT', '10'))
 DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', 'no-reply@stadium.local')
 
 CORS_ALLOW_ALL_ORIGINS = DEBUG and env_bool('CORS_ALLOW_ALL_ORIGINS', True)
