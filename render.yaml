@@ -11,7 +11,7 @@ services:
     plan: free
     rootDir: backend
     buildCommand: pip install -r requirements.txt && python manage.py collectstatic --noinput && python manage.py migrate
-    startCommand: gunicorn config.wsgi:application
+    startCommand: gunicorn config.wsgi:application --workers 1 --timeout 120 --access-logfile - --error-logfile -
     healthCheckPath: /api/events/public-upcoming/
     envVars:
       - key: PYTHON_VERSION
@@ -23,7 +23,7 @@ services:
       - key: DJANGO_ALLOWED_HOSTS
         value: .onrender.com
       - key: WEB_CONCURRENCY
-        value: "4"
+        value: "1"
       - key: SECURE_SSL_REDIRECT
         value: "True"
       - key: DATABASE_URL
