@@ -42,6 +42,13 @@ export default function Register() {
         { replace: true }
       );
     } catch (apiError) {
+      console.error("Registration request failed", {
+        status: apiError?.response?.status,
+        data: apiError?.response?.data,
+        url: apiError?.config
+          ? `${apiError.config.baseURL || ""}${apiError.config.url || ""}`
+          : null,
+      });
       setError(getApiErrorMessage(apiError, "Unable to create account. Please try again."));
     } finally {
       setLoading(false);

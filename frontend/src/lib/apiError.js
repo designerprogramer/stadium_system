@@ -1,5 +1,6 @@
 export function getApiErrorMessage(error, fallback) {
   const data = error?.response?.data;
+  const status = error?.response?.status;
   const isProductionMissingApiUrl = !import.meta.env.DEV && !import.meta.env.VITE_API_BASE_URL;
   const requestUrl = error?.config ? `${error.config.baseURL || ''}${error.config.url || ''}` : null;
 
@@ -19,6 +20,22 @@ export function getApiErrorMessage(error, fallback) {
     if (typeof value === "string" && value.trim()) {
       return value;
     }
+  }
+
+  if (error?.response) {
+    if (status === 404) {
+      return `API endpoint not found${requestUrl ? `: ${requestUrl}` : ""}. Check VITE_API_BASE_URL and backend URL routing.`;
+    }
+
+    if (status === 403) {
+      return "Request was blocked by the backend. Check CORS/CSRF settings and deploy environment variables.";
+    }
+
+    if (status >= 500) {
+      return "The backend returned a server error. Check the Render logs for the exact traceback.";
+    }
+
+    return fallback;
   }
 
   if (error?.request && !error?.response) {
